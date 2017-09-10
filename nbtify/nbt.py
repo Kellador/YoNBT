@@ -1,4 +1,5 @@
 from struct import unpack, pack
+import gzip
 
 
 def decode_name(decode, named=True):
@@ -34,13 +35,8 @@ class TAG_Byte:
         encode_name(self, encode)
         encode("b", self.value)
 
-    def __repr__(self):
-        return "{0} {1}('{2!r}' : {3!r})\n".format(
-            ' ' * 3,
-            self.__class__.__name__,
-            self.name,
-            self.value
-        )
+    def editValue(self, value):
+        self.value = int(value)
 
 
 class TAG_Short:
@@ -58,13 +54,8 @@ class TAG_Short:
         encode_name(self, encode)
         encode("h", self.value)
 
-    def __repr__(self):
-        return "{0} {1}('{2!r}' : {3!r})\n".format(
-            ' ' * 3,
-            self.__class__.__name__,
-            self.name,
-            self.value
-        )
+    def editValue(self, value):
+        self.value = int(value)
 
 
 class TAG_Int:
@@ -82,13 +73,8 @@ class TAG_Int:
         encode_name(self, encode)
         encode("i", self.value)
 
-    def __repr__(self):
-        return "{0} {1}('{2!r}' : {3!r})\n".format(
-            ' ' * 3,
-            self.__class__.__name__,
-            self.name,
-            self.value
-        )
+    def editValue(self, value):
+        self.value = int(value)
 
 
 class TAG_Long:
@@ -106,13 +92,8 @@ class TAG_Long:
         encode_name(self, encode)
         encode("q", self.value)
 
-    def __repr__(self):
-        return "{0} {1}('{2!r}' : {3!r})\n".format(
-            ' ' * 3,
-            self.__class__.__name__,
-            self.name,
-            self.value
-        )
+    def editValue(self, value):
+        self.value = int(value)
 
 
 class TAG_Float:
@@ -130,13 +111,8 @@ class TAG_Float:
         encode_name(self, encode)
         encode("f", self.value)
 
-    def __repr__(self):
-        return "{0} {1}('{2!r}' : {3!r})\n".format(
-            ' ' * 3,
-            self.__class__.__name__,
-            self.name,
-            self.value
-        )
+    def editValue(self, value):
+        self.value = float(value)
 
 
 class TAG_Double:
@@ -154,39 +130,8 @@ class TAG_Double:
         encode_name(self, encode)
         encode("d", self.value)
 
-    def __repr__(self):
-        return "{0} {1}('{2!r}' : {3!r})\n".format(
-            ' ' * 3,
-            self.__class__.__name__,
-            self.name,
-            self.value
-        )
-
-
-class TAG_Byte_Array:
-    def __init__(self, value=None, name=None, decode=None, named=True):
-        if decode is None:
-            self.name = name
-            self.value = value
-        else:
-            self.name = decode_name(decode, named)
-            self.value = bytearray(decode.io.read(decode("i", 4)[0]))
-
-    def nbtify(self, encode, hastag=True):
-        if hastag:
-            encode("b", 7)
-        encode_name(self, encode)
-        encode("i", len(self.value))
-        for i in self.value:
-            encode("b", i)
-
-    def __repr__(self):
-        return "{0} {1}('{2!r}' : {3!r})\n".format(
-            ' ' * 3,
-            self.__class__.__name__,
-            self.name,
-            self.value.__len__()
-        )
+    def editValue(self, value):
+        self.value = float(value)
 
 
 class TAG_String:
@@ -206,13 +151,8 @@ class TAG_String:
         encode("H", len(self.value.encode('utf-8')))
         encode.io.write(self.value.encode('utf-8'))
 
-    def __repr__(self):
-        return "{0} {1}('{2!r}' : {3!r})\n".format(
-            ' ' * 3,
-            self.__class__.__name__,
-            self.name,
-            self.value
-        )
+    def editValue(self, value):
+        self.value = value
 
 
 class TAG_List:
@@ -240,16 +180,8 @@ class TAG_List:
         for i in self.value:
             i.nbtify(encode, hastag=False)
 
-    def __repr__(self):
-        d = []
-        for i in self.value:
-            d.append(i)
-        return "{0} '{3}' {1!r} entries:( {2!r})\n".format(
-            self.__class__.__name__,
-            len(self.value),
-            d,
-            self.name
-        )
+    def addTAG(self, value):
+        self.value.append(tag[self.tags_type](value=value))
 
 
 class TAG_Compound:
@@ -278,16 +210,8 @@ class TAG_Compound:
             i.nbtify(encode)
         encode("b", 0)
 
-    def __repr__(self):
-        d = []
-        for i in self.value:
-            d.append(i)
-        return "{0} '{3}' {1!r} entries:( {2!r})\n".format(
-            "TAG_Compound",
-            len(self.value),
-            d,
-            self.name
-        )
+    def addTAG(self, tagtype, name):
+        self.value.append(tag[tagtype](name=name))
 
 
 class TAG_Int_Array:
@@ -306,7 +230,6 @@ class TAG_Int_Array:
                 while arlen > 0:
                     self.value.append(decode("i", 4)[0])
                     arlen -= 1
-            # self.value = list(decode("i", decode("i", 4)[0] * 4))
 
     def nbtify(self, encode, hastag=True):
         if hastag:
@@ -317,25 +240,73 @@ class TAG_Int_Array:
             for n in self.value:
                 encode("i", n)
 
-    def __repr__(self):
-        return "{0} {1}('{2!r}' : {3!r})\n".format(
-            ' ' * 3,
-            self.__class__.__name__,
-            self.name,
-            self.value
-        )
+
+class TAG_Byte_Array:
+    def __init__(self, value=None, name=None, decode=None, named=True):
+        if decode is None:
+            self.name = name
+            self.value = value
+        else:
+            self.name = decode_name(decode, named)
+            self.value = bytearray(decode.io.read(decode("i", 4)[0]))
+
+    def nbtify(self, encode, hastag=True):
+        if hastag:
+            encode("b", 7)
+        encode_name(self, encode)
+        encode("i", len(self.value))
+        for i in self.value:
+            encode("b", i)
 
 
 class NBTObj(TAG_Compound):
-    def __init__(self, value=None, name=None, io=None):
-        if io is not None:
-            decode = lambda fmt, size: unpack(">" + fmt, io.read(size))
-            decode.io = io
-            if decode("b", 1)[0] != 10:
-                raise NBTException("Invalid NBT data! Maybe it's gzipped?")
-            super().__init__(decode=decode)
+    def __init__(self, nbtfile):
+        self.nbtfile = nbtfile
+        try:
+            with gzip.open(nbtfile, 'rb') as io:
+                decode = lambda fmt, size: unpack(">" + fmt, io.read(size))
+                decode.io = io
+                if decode("b", 1)[0] != 10:
+                    raise NBTException("Invalid NBT data! Maybe it's gzipped?")
+                super().__init__(decode=decode)
+                io.close()
+            self.gzipped = True
+        except OSError:
+            with open(nbtfile, 'rb') as io:
+                decode = lambda fmt, size: unpack(">" + fmt, io.read(size))
+                decode.io = io
+                if decode("b", 1)[0] != 10:
+                    raise NBTException("Invalid NBT data! Maybe it's gzipped?")
+                super().__init__(decode=decode)
+                io.close()
+            self.gzipped = False
+
+    def reload(self):
+        try:
+            with gzip.open(self.nbtfile, 'rb') as io:
+                super().__init__(io=io)
+                io.close()
+            self.gzipped = True
+        except OSError:
+            with open(self.nbtfile, 'rb') as io:
+                super().__init__(io=io)
+                io.close()
+            self.gzipped = False
+
+    def save(self, destfile=None):
+        if destfile is None:
+            nbtfile = self.nbtfile
         else:
-            super().__init__(value=value, name=name)
+            nbtfile = destfile
+        if self.gzipped:
+            with gzip.open(nbtfile, 'wb') as io:
+                self.nbtify(io=io)
+                io.close()
+        else:
+            with open(nbtfile, 'wb') as io:
+                self.nbtify(io=io)
+                io.close()
+        return True
 
 
 tag = {
@@ -351,6 +322,22 @@ tag = {
     9: TAG_List,
     10: TAG_Compound,
     11: TAG_Int_Array
+}
+
+
+tagString = {
+    TAG_End: 'End',
+    TAG_Byte: 'Byte',
+    TAG_Short: 'Short',
+    TAG_Int: 'Int',
+    TAG_Long: 'Long',
+    TAG_Float: 'Float',
+    TAG_Double: 'Double',
+    TAG_Byte_Array: 'Byte_Array',
+    TAG_String: 'String',
+    TAG_List: 'List',
+    TAG_Compound: 'Compound',
+    TAG_Int_Array: 'Int_Array'
 }
 
 
