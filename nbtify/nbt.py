@@ -1,13 +1,21 @@
+import logging
 from struct import pack, unpack
-import gzip
 from collections.abc import MutableMapping, MutableSequence
+
+log = logging.getLogger('nbt')
 
 
 class NBTException(Exception):
     pass
 
 
-class TAGMixin:
+class TAG:
+    def __init__(self, name=None):
+        if name is None:
+            self.name = None
+        else:
+            self.name = name
+
     def encode(self, io, fmt, *args):
         io.write(pack(">" + fmt, *args))
 
@@ -19,24 +27,24 @@ class TAGMixin:
         io.write(self.name.encode('utf-8'))
 
     def decode_name(self, io):
-        return io.read(unpack(">H", 2)[0]).decode('utf-8')
+        return io.read(unpack(">H", io.read(2))[0]).decode('utf-8')
 
     def __str__(self):
-        return f'{self.__class__.name__} {self.name}: {self.value}'
+        return f'{tagNames[self.__class__.__name__]}: ' + \
+            (f'{self.name}: ' if self.name else '') + \
+            f'{self.value}'
 
 
 class TAG_End():
     pass
 
 
-class TAG_Byte(TAGMixin):
+class TAG_Byte(TAG):
     def __init__(self, name=None, value=None, io=None):
+        super().__init__(name=name)
         if io is None:
-            self.name = name
             self.value = value
         else:
-            if name is not None:
-                self.name = name
             self.value = self.decode(io, 'b', 1)[0]
 
     def saveNBT(self, io, typed=True):
@@ -47,14 +55,12 @@ class TAG_Byte(TAGMixin):
         self.encode(io, 'b', self.value)
 
 
-class TAG_Short(TAGMixin):
+class TAG_Short(TAG):
     def __init__(self, name=None, value=None, io=None):
+        super().__init__(name=name)
         if io is None:
-            self.name = name
             self.value = value
         else:
-            if name is not None:
-                self.name = name
             self.value = self.decode(io, 'h', 2)[0]
 
     def saveNBT(self, io, typed=True):
@@ -65,14 +71,12 @@ class TAG_Short(TAGMixin):
         self.encode(io, 'h', self.value)
 
 
-class TAG_Int(TAGMixin):
+class TAG_Int(TAG):
     def __init__(self, name=None, value=None, io=None):
+        super().__init__(name=name)
         if io is None:
-            self.name = name
             self.value = value
         else:
-            if name is not None:
-                self.name = name
             self.value = self.decode(io, 'i', 4)[0]
 
     def saveNBT(self, io, typed=True):
@@ -83,14 +87,12 @@ class TAG_Int(TAGMixin):
         self.encode(io, 'i', self.value)
 
 
-class TAG_Long(TAGMixin):
+class TAG_Long(TAG):
     def __init__(self, name=None, value=None, io=None):
+        super().__init__(name=name)
         if io is None:
-            self.name = name
             self.value = value
         else:
-            if name is not None:
-                self.name = name
             self.value = self.decode(io, 'q', 8)[0]
 
     def saveNBT(self, io, typed=True):
@@ -101,14 +103,12 @@ class TAG_Long(TAGMixin):
         self.encode(io, 'q', self.value)
 
 
-class TAG_Float(TAGMixin):
+class TAG_Float(TAG):
     def __init__(self, name=None, value=None, io=None):
+        super().__init__(name=name)
         if io is None:
-            self.name = name
             self.value = value
         else:
-            if name is not None:
-                self.name = name
             self.value = self.decode(io, 'f', 4)[0]
 
     def saveNBT(self, io, typed=True):
@@ -119,14 +119,12 @@ class TAG_Float(TAGMixin):
         self.encode(io, 'f', self.value)
 
 
-class TAG_Double(TAGMixin):
+class TAG_Double(TAG):
     def __init__(self, name=None, value=None, io=None):
+        super().__init__(name=name)
         if io is None:
-            self.name = name
             self.value = value
         else:
-            if name is not None:
-                self.name = name
             self.value = self.decode(io, 'd', 8)[0]
 
     def saveNBT(self, io, typed=True):
@@ -137,14 +135,12 @@ class TAG_Double(TAGMixin):
         self.encode(io, 'd', self.value)
 
 
-class TAG_Byte_Array(MutableSequence, TAGMixin):
+class TAG_Byte_Array(MutableSequence, TAG):
     def __init__(self, name=None, value=None, io=None):
+        super().__init__(name=name)
         if io is None:
-            self.name = name
             self.value = value
         else:
-            if name is not None:
-                self.name = name
             self.value = bytearray(io.read(self.decode(io, 'i', 4)[0]))
 
     def saveNBT(self, io, typed=True):
@@ -172,18 +168,17 @@ class TAG_Byte_Array(MutableSequence, TAGMixin):
         self.value.insert(index, value)
 
     def __str__(self):
-        return f'{self.__class__.__name__}: {self.name}: ' + \
+        return 'ByteArr: ' + \
+            (f'{self.name}: ' if self.name else '') + \
             '[' + ' '.join([str(x) for x in self.value]) + ']'
 
 
-class TAG_String(TAGMixin):
+class TAG_String(TAG):
     def __init__(self, name=None, value=None, io=None):
+        super().__init__(name=name)
         if io is None:
-            self.name = name
             self.value = value
         else:
-            if name is not None:
-                self.name = name
             self.value = self.decode_name(io)
 
     def saveNBT(self, io, typed=True):
@@ -195,18 +190,17 @@ class TAG_String(TAGMixin):
         io.write(self.value.encode('utf-8'))
 
 
-class TAG_List(MutableSequence, TAGMixin):
+class TAG_List(MutableSequence, TAG):
     def __init__(self, name=None, value=None, tags_type=None, io=None):
+        super().__init__(name=name)
         if io is None:
-            self.name = name
             self.value = value
             self.tags_type = tags_type
         else:
-            if name is not None:
-                self.name = name
             self.value = []
             self.tags_type = self.decode(io, 'b', 1)[0]
-            for _ in range(self.decode(io, 'i', 4)[0]):
+            self.list_size = self.decode(io, 'i', 4)[0]
+            for _ in range(self.list_size):
                 self.value.append(tag[self.tags_type](io=io))
 
     def saveNBT(self, io, typed=True):
@@ -216,7 +210,7 @@ class TAG_List(MutableSequence, TAGMixin):
             self.encode_name(io)
         if len(self.value) > 0:
             self.encode(io, 'b', self.tags_type)
-            self.encode(io, 'i', len(self.value))
+            self.encode(io, 'i', self.list_size)
             for i in self.value:
                 i.saveNBT(io, typed=False)
         else:
@@ -239,32 +233,49 @@ class TAG_List(MutableSequence, TAGMixin):
         self.value.insert(index, value)
 
     def __str__(self):
-        return f'{self.__class__.__name__}: {self.name}: ' + \
+        return 'List: ' + \
+            (f'{self.name}: ' if self.name else '') + \
             '[\n\t' + '\n\t'.join([str(x) for x in self.value]) + ']'
 
+    def pretty(self, indent=0):
+        rep = []
+        for v in self.value:
+            if isinstance(v, TAG_Compound):
+                rep.append('\t' * indent + '{')
+                rep.extend(v.pretty(indent=indent + 1))
+                rep.append('\t' * indent + '}')
+            elif isinstance(v, TAG_List):
+                rep.append('\t' * indent + '[')
+                rep.extend(v.pretty(indent=indent + 1))
+                rep.append('\t' * indent + ']')
+            else:
+                rep.append('\t' * indent + str(v))
+        return rep
 
-class TAG_Compound(MutableMapping, TAGMixin):
+
+class TAG_Compound(MutableMapping, TAG):
     def __init__(self, name=None, value=None, io=None):
+        super().__init__(name=name)
         if io is None:
-            self.name = name
             self.value = value
         else:
-            if name is not None:
-                self.name = name
             self.value = {}
             while True:
                 typeID = self.decode(io, 'b', 1)[0]
                 if typeID == 0:
+                    log.info('Breaking')
                     break
                 tagName = self.decode_name(io)
                 self.value[tagName] = tag[typeID](name=tagName, io=io)
+                log.info(f'Decoded {str(self.value[tagName])}')
 
     def saveNBT(self, io, typed=True):
         if typed:
             self.encode(io, 'b', 10)
         if self.name is not None:
             self.encode_name(io)
-        for i in self.value:
+        for i in self.value.values():
+            log.info(f'Encoding {str(i)}...')
             i.saveNBT(io)
         self.encode(io, 'b', 0)
 
@@ -284,18 +295,32 @@ class TAG_Compound(MutableMapping, TAGMixin):
         return len(self.value)
 
     def __str__(self):
-        return f'{self.__class__.__name__}: {self.name}: ' + \
-            '{' + '\n\t'.join([str(x) for x in self.value]) + '}'
+        return 'Compound: ' + \
+            (f'{self.name}: ' if self.name else '') + \
+            '{' + '\n\t'.join([str(x) for x in self.value.values()]) + '}'
+
+    def pretty(self, indent=0):
+        rep = []
+        for k, v in self.value.items():
+            if isinstance(v, TAG_Compound):
+                rep.append('\t' * indent + str(k) + ': {')
+                rep.extend(v.pretty(indent=indent + 1))
+                rep.append('\t' * indent + '}')
+            elif isinstance(v, TAG_List):
+                rep.append('\t' * indent + str(k) + ': [')
+                rep.extend(v.pretty(indent=indent + 1))
+                rep.append('\t' * indent + ']')
+            else:
+                rep.append('\t' * indent + str(v))
+        return rep
 
 
-class TAG_Int_Array(MutableSequence, TAGMixin):
+class TAG_Int_Array(MutableSequence, TAG):
     def __init__(self, name=None, value=None, io=None):
+        super().__init__(name=name)
         if io is None:
-            self.name = name
             self.value = value
         else:
-            if name is not None:
-                self.name = name
             self.value = []
             for _ in range(self.decode(io, 'i', 4)[0]):
                 self.value.append(self.decode(io, 'i', 4)[0])
@@ -305,6 +330,7 @@ class TAG_Int_Array(MutableSequence, TAGMixin):
             self.encode(io, 'b', 11)
         if self.name is not None:
             self.encode_name(io)
+        self.encode(io, 'i', len(self.value))
         for i in self.value:
             self.encode(io, 'i', i)
 
@@ -324,44 +350,21 @@ class TAG_Int_Array(MutableSequence, TAGMixin):
         self.value.insert(index, value)
 
     def __str__(self):
-        return f'{self.__class__.__name__}: {self.name}: ' + \
+        return 'IntArr: ' + \
+            (f'{self.name}: ' if self.name else '') + \
             '[' + ' '.join([str(x) for x in self.value]) + ']'
 
 
 class NBTObj(TAG_Compound):
-    def __init__(self, nbtfile=None):
-        if nbtfile is not None:
-            self.nbtfile = nbtfile
-            try:
-                with gzip.open(self.nbtfile, 'rb') as io:
-                    if self.decode(io, 'b', 1)[0] != 10:
-                        raise NBTException("Invalid NBT File!")
-                    super().__init__(io=io)
-                self.gzipped = True
-            except OSError:
-                with open(self.nbtfile, 'rb') as io:
-                    if self.decode(io, 'b', 1)[0] != 10:
-                        raise NBTException("Invalid NBT File!")
-                    super().__init__(io=io)
-                self.gzipped = False
+    def __init__(self, io=None):
+        if io is not None:
+            if self.decode(io, 'b', 1)[0] != 10:
+                raise NBTException("Invalid NBT Data!")
+            baseName = self.decode_name(io)
+            super().__init__(name=baseName, io=io)
 
-    def reload(self):
-        if self.gzipped:
-            with gzip.open(self.nbtfile, 'rb') as io:
-                super().__init__(io=io)
-        else:
-            with open(self.nbtfile, 'rb') as io:
-                super().__init__(io=io)
-
-    def save(self, destfile=None):
-        if destfile is None:
-            destfile = self.nbtfile
-        if self.gzipped:
-            with gzip.open(destfile, 'wb') as io:
-                super().saveNBT(io)
-        else:
-            with open(destfile, 'wb') as io:
-                super().saveNBT(io)
+    def pretty(self):
+        print('BaseCompound: {\n' + '\n'.join(super().pretty(indent=1)) + '\n}')
 
 
 tag = {
@@ -377,4 +380,15 @@ tag = {
     9: TAG_List,
     10: TAG_Compound,
     11: TAG_Int_Array
+}
+
+
+tagNames = {
+    'TAG_Byte': 'B',
+    'TAG_Short': 'S',
+    'TAG_Int': 'I',
+    'TAG_Long': 'L',
+    'TAG_Float': 'F',
+    'TAG_Double': 'D',
+    'TAG_String': 'Str'
 }
