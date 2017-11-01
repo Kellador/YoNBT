@@ -9,13 +9,7 @@ class NBTException(Exception):
     pass
 
 
-class TAG:
-    def __init__(self, name=None):
-        if name is None:
-            self.name = None
-        else:
-            self.name = name
-
+class TAGMixin:
     def encode(self, io, fmt, *args):
         io.write(pack(">" + fmt, *args))
 
@@ -39,9 +33,9 @@ class TAG_End():
     pass
 
 
-class TAG_Byte(TAG):
+class TAG_Byte(TAGMixin):
     def __init__(self, name=None, value=None, io=None):
-        super().__init__(name=name)
+        self.name = name
         if io is None:
             self.value = value
         else:
@@ -55,9 +49,9 @@ class TAG_Byte(TAG):
         self.encode(io, 'b', self.value)
 
 
-class TAG_Short(TAG):
+class TAG_Short(TAGMixin):
     def __init__(self, name=None, value=None, io=None):
-        super().__init__(name=name)
+        self.name = name
         if io is None:
             self.value = value
         else:
@@ -71,9 +65,9 @@ class TAG_Short(TAG):
         self.encode(io, 'h', self.value)
 
 
-class TAG_Int(TAG):
+class TAG_Int(TAGMixin):
     def __init__(self, name=None, value=None, io=None):
-        super().__init__(name=name)
+        self.name = name
         if io is None:
             self.value = value
         else:
@@ -87,9 +81,9 @@ class TAG_Int(TAG):
         self.encode(io, 'i', self.value)
 
 
-class TAG_Long(TAG):
+class TAG_Long(TAGMixin):
     def __init__(self, name=None, value=None, io=None):
-        super().__init__(name=name)
+        self.name = name
         if io is None:
             self.value = value
         else:
@@ -103,9 +97,9 @@ class TAG_Long(TAG):
         self.encode(io, 'q', self.value)
 
 
-class TAG_Float(TAG):
+class TAG_Float(TAGMixin):
     def __init__(self, name=None, value=None, io=None):
-        super().__init__(name=name)
+        self.name = name
         if io is None:
             self.value = value
         else:
@@ -119,9 +113,9 @@ class TAG_Float(TAG):
         self.encode(io, 'f', self.value)
 
 
-class TAG_Double(TAG):
+class TAG_Double(TAGMixin):
     def __init__(self, name=None, value=None, io=None):
-        super().__init__(name=name)
+        self.name = name
         if io is None:
             self.value = value
         else:
@@ -135,9 +129,9 @@ class TAG_Double(TAG):
         self.encode(io, 'd', self.value)
 
 
-class TAG_Byte_Array(MutableSequence, TAG):
+class TAG_Byte_Array(MutableSequence, TAGMixin):
     def __init__(self, name=None, value=None, io=None):
-        super().__init__(name=name)
+        self.name = name
         if io is None:
             self.value = value
         else:
@@ -173,9 +167,9 @@ class TAG_Byte_Array(MutableSequence, TAG):
             '[' + ' '.join([str(x) for x in self.value]) + ']'
 
 
-class TAG_String(TAG):
+class TAG_String(TAGMixin):
     def __init__(self, name=None, value=None, io=None):
-        super().__init__(name=name)
+        self.name = name
         if io is None:
             self.value = value
         else:
@@ -190,9 +184,9 @@ class TAG_String(TAG):
         io.write(self.value.encode('utf-8'))
 
 
-class TAG_List(MutableSequence, TAG):
+class TAG_List(MutableSequence, TAGMixin):
     def __init__(self, name=None, value=None, tags_type=None, io=None):
-        super().__init__(name=name)
+        self.name = name
         if io is None:
             self.value = value
             self.tags_type = tags_type
@@ -253,9 +247,9 @@ class TAG_List(MutableSequence, TAG):
         return rep
 
 
-class TAG_Compound(MutableMapping, TAG):
+class TAG_Compound(MutableMapping, TAGMixin):
     def __init__(self, name=None, value=None, io=None):
-        super().__init__(name=name)
+        self.name = name
         if io is None:
             self.value = value
         else:
@@ -315,9 +309,9 @@ class TAG_Compound(MutableMapping, TAG):
         return rep
 
 
-class TAG_Int_Array(MutableSequence, TAG):
+class TAG_Int_Array(MutableSequence, TAGMixin):
     def __init__(self, name=None, value=None, io=None):
-        super().__init__(name=name)
+        self.name = name
         if io is None:
             self.value = value
         else:
