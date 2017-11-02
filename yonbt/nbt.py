@@ -1,8 +1,5 @@
-import logging
 from struct import pack, unpack
 from collections.abc import MutableMapping, MutableSequence
-
-log = logging.getLogger('nbt')
 
 
 class NBTException(Exception):
@@ -143,8 +140,7 @@ class TAG_Byte_Array(MutableSequence, TAGMixin):
         if self.name is not None:
             self.encode_name(io)
         self.encode(io, 'i', len(self.value))
-        for i in self.value:
-            self.encode(io, 'b', i)
+        io.write(self.value)
 
     def __getitem__(self, index):
         return self.value[index]
@@ -257,11 +253,9 @@ class TAG_Compound(MutableMapping, TAGMixin):
             while True:
                 typeID = self.decode(io, 'b', 1)[0]
                 if typeID == 0:
-                    log.info('Breaking')
                     break
                 tagName = self.decode_name(io)
                 self.value[tagName] = tag[typeID](name=tagName, io=io)
-                log.info(f'Decoded {str(self.value[tagName])}')
 
     def saveNBT(self, io, typed=True):
         if typed:
@@ -269,7 +263,6 @@ class TAG_Compound(MutableMapping, TAGMixin):
         if self.name is not None:
             self.encode_name(io)
         for i in self.value.values():
-            log.info(f'Encoding {str(i)}...')
             i.saveNBT(io)
         self.encode(io, 'b', 0)
 
@@ -384,5 +377,9 @@ tagNames = {
     'TAG_Long': 'L',
     'TAG_Float': 'F',
     'TAG_Double': 'D',
-    'TAG_String': 'Str'
+    'TAG_String': 'Str',
+    'TAG_Compound': 'Co',
+    'TAG_List': 'Li',
+    'TAG_Byte_Array': 'Ba',
+    'TAG_Int_Array': 'Ia'
 }
