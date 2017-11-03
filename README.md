@@ -2,12 +2,20 @@
 `yonbt` is yet another NBT parsing library, which allows you to decode and encode files in the Named Binary Tag (NBT) file format,
 used by many Minecraft files.
 
-## Usage
+## Features
+A few simple high level classes for easy decoding and re-encoding of generic NBT formatted files, such as playerdata files,
+and the more complex region files, containing all the chunk data for a Minecraft world.
+
+Low level classes representing the underlying NBT structure, allowing you to create new tag entries in decoded NBT files
+or to create whole NBT files from scratch. Be sure to familiarize yourself with the [NBT Format](http://wiki.vg/NBT) beforehand.
+
+
+## Basic Usage
 ### Encoding and Decoding
 ```python
 from yonbt import NBTFile, RegionFile
 
-# Load a generic nbt formatted file, such as a playerdata file.
+# Load a generic nbt formatted file.
 genericNBT = NBTFile("/home/nbt/genericPlayer.dat")
 
 # Save an NBTFile object back to file,
@@ -65,13 +73,16 @@ genericNBT.pretty()
 # exposing all contained chunks, using a tuple of their (x, z) coordinates as the keys.
 
 # And because each chunk is itself an NBTObj, you can access and manipulate 
-# any contained tag entries as you would with a generic NBT file.
+# any contained tag entries as you would with a generic NBTObj.
 
 print(region[(10, 0)]['Level']['LightPopulated'])
 > B: LightPopulated: 1
-# yay for nested dictionaries!
 
+# You can also delete a whole chunk entry
+del region[(1, 1)]
 
+# do note however, that the entry will not actually be removed;
+# Instead the chunk behind that key will be overwritten with an empty chunk.
+# This is to ensure that Minecraft will still recognize the file as valid
+# after it is encoded again.
 ```
-
-### Advanced Features
