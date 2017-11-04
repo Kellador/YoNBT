@@ -59,18 +59,18 @@ class Region(MutableMapping):
                 io.seek(chunk.offset * 4096)
                 chunk.length = unpack('>I', io.read(4))[0]
                 chunk.compression = unpack('>B', io.read(1))[0]
-                if chunk.compression == 2:
-                    rawChunk = BytesIO(zlib.decompress(io.read(chunk.length - 1)))
-                elif chunk.compression == 1:
-                    rawChunk = BytesIO(gzip.decompress(io.read(chunk.length - 1)))
-                else:
-                    raise ChunkException('Invalid chunk compression!')
-                chunk.nbt = NBTObj(io=rawChunk)
+                with BytesIO() as tmpio:
+                    if chunk.compression == 2:
+                        tmpio.write(zlib.decompress(io.read(chunk.length - 1)))
+                    elif chunk.compression == 1:
+                        tmpio.write(gzip.decompress(io.read(chunk.length - 1)))
+                    else:
+                        raise ChunkException('Invalid chunk compression!')
+                    chunk.nbt = NBTObj(io=tmpio)
             except IOError as e:
                 log.critical('Error decoding Region!')
                 log.critical(e)
-            finally:
-                rawChunk.close()
+                break
 
     def encodeRegion(self, io):
         self.encodeChunks()
@@ -95,16 +95,17 @@ class Region(MutableMapping):
             if chunk.offset == 0 and chunk.sectors == 0:
                 continue
             try:
-                rawChunk = BytesIO()
-                chunk.nbt.saveNBT(io=rawChunk)
-                if chunk.compression == 2:
-                    compChunk = zlib.compress(rawChunk.getvalue())
-                elif chunk.compression == 1:
-                    compChunk = gzip.compress(rawChunk.getvalue())
-                else:
-                    raise ChunkException('Invalid chunk compression!')
+                with BytesIO() as rawChunk:
+                    chunk.nbt.saveNBT(io=rawChunk)
+                    if chunk.compression == 2:
+                        compChunk = zlib.compress(rawChunk.getvalue())
+                    elif chunk.compression == 1:
+                        compChunk = gzip.compress(rawChunk.getvalue())
+                    else:
+                        raise ChunkException('Invalid chunk compression!')
             except IOError as e:
                 log.critical(e)
+                break
             chunk.compressed = compChunk
             chunk.timestamp = int(time.time())
             chunk.length = len(compChunk) + 1

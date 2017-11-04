@@ -15,12 +15,10 @@ class NBTFile(NBTObj):
         try:
             with gzip.open(self.filename, 'rb') as io:
                 super().__init__(io=io)
-                io.close()
             self.compression = 'GZIP'
         except IOError:
             with open(self.filename, 'rb') as io:
                 super().__init__(io=io)
-                io.close()
             self.compression = 'NONE'
 
     def save(self, destfile=None):
@@ -29,11 +27,9 @@ class NBTFile(NBTObj):
         if self.compression == 'GZIP':
             with gzip.open(destfile, 'wb') as io:
                 self.saveNBT(io)
-                io.close()
         elif self.compression == 'NONE':
             with open(destfile, 'wb') as io:
                 self.saveNBT(io)
-                io.close()
 
 
 class RegionFile(Region):
@@ -48,7 +44,6 @@ class RegionFile(Region):
             name = n[0]
         with open(self.filename, 'rb') as io:
             super().__init__(name=name, io=io)
-            io.close()
 
     def save(self, destfile=None):
         if destfile is None:
@@ -60,4 +55,3 @@ class RegionFile(Region):
                             ' Minecraft will not be able to read this file!')
         with open(destfile, 'wb') as io:
             self.encodeRegion(io)
-            io.close()
