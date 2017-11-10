@@ -35,13 +35,13 @@ class NBTFile(NBTObj):
 class RegionFile(Region):
     def __init__(self, filename):
         self.filename = filename
-        n = re.search('r\..\..(?=\.mca)', filename)
+        n = re.search('r\.(?P<x>-?.)\.(?P<z>-?.)(?=\.mca)', filename)
         if n is None:
-            log.warning('Invalid region filename!'
-                        ' Minecraft will not be able to read this file!')
-            name = filename
+            log.warning('Invalid region filename!')
+            log.warning('Loading Region as (0, 0).')
+            name = 0, 0
         else:
-            name = n[0]
+            name = int(n.group('x')), int(n.group('z'))
         with open(self.filename, 'rb') as io:
             super().__init__(name=name, io=io)
 
@@ -49,7 +49,7 @@ class RegionFile(Region):
         if destfile is None:
             destfile = self.filename
         else:
-            n = re.search('r\..\..(?=\.mca)', destfile)
+            n = re.search('r\.-?.\.-?.(?=\.mca)', destfile)
             if n is None:
                 log.warning('Invalid region filename!'
                             ' Minecraft will not be able to read this file!')

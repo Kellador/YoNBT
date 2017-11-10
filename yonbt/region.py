@@ -66,6 +66,7 @@ class Region(MutableMapping):
                         tmpio.write(gzip.decompress(io.read(chunk.length - 1)))
                     else:
                         raise ChunkException('Invalid chunk compression!')
+                    tmpio.seek(0)
                     chunk.nbt = NBTObj(io=tmpio)
             except IOError as e:
                 log.critical('Error decoding Region!')
@@ -125,13 +126,25 @@ class Region(MutableMapping):
             sortedChunks[i].offset = prevChunk.offset + prevChunk.sectors
 
     def __getitem__(self, key):
-        return self.chunks[key]
+        if key in self.chunks:
+            return self.chunks[key]
+        else:
+            key = key[0] - (self.name[0] * 32), key[1] - (self.name[1] * 32)
+            return self.chunks[key]
 
     def __setitem__(self, key, value):
-        self.chunks[key] = value
+        if key in self.chunks:
+            self.chunks[key] = value
+        else:
+            key = key[0] - (self.name[0] * 32), key[1] - (self.name[1] * 32)
+            self.chunks[key] = value
 
     def __delitem__(self, key):
-        self.chunks[key] = Chunk(key[0], key[1])
+        if key in self.chunks:
+            self.chunks[key] = Chunk(key[0], key[1])
+        else:
+            key = key[0] - (self.name[0] * 32), key[1] - (self.name[1] * 32)
+            self.chunks[key] = Chunk(key[0], key[1])
 
     def __iter__(self):
         return iter(self.chunks)
