@@ -7,7 +7,7 @@ from struct import pack, unpack
 from collections.abc import MutableMapping
 from nbt import NBTObj
 
-log = logging.getLogger('nbt')
+log = logging.getLogger(__name__)
 
 
 class RegionException(Exception):

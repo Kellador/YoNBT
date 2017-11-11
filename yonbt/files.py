@@ -1,12 +1,10 @@
 import gzip
 import logging
 import re
-import coloredlogs
 from nbt import NBTObj
 from region import Region
 
-log = logging.getLogger('nbt')
-coloredlogs.install(level='DEBUG', logger=log)
+log = logging.getLogger(__name__)
 
 
 class NBTFile(NBTObj):
@@ -16,20 +14,25 @@ class NBTFile(NBTObj):
             with gzip.open(self.filename, 'rb') as io:
                 super().__init__(io=io)
             self.compression = 'GZIP'
+            log.info(f'{self.filename} was GZIP compressed.')
         except IOError:
             with open(self.filename, 'rb') as io:
                 super().__init__(io=io)
             self.compression = 'NONE'
+            log.info(f'{self.filename} was not compressed.')
 
     def save(self, destfile=None):
         if destfile is None:
             destfile = self.filename
+            log.info('No save destination specified.')
         if self.compression == 'GZIP':
             with gzip.open(destfile, 'wb') as io:
                 self.saveNBT(io)
+            log.info(f'GZIP compression applied to \"{destfile}\".')
         elif self.compression == 'NONE':
             with open(destfile, 'wb') as io:
                 self.saveNBT(io)
+            log.info(f'No compression applied to \"{destfile}\".')
 
 
 class RegionFile(Region):
@@ -38,16 +41,17 @@ class RegionFile(Region):
         n = re.search('r\.(?P<x>-?.)\.(?P<z>-?.)(?=\.mca)', filename)
         if n is None:
             log.warning('Invalid region filename!')
-            log.warning('Loading Region as (0, 0).')
             name = 0, 0
         else:
             name = int(n.group('x')), int(n.group('z'))
         with open(self.filename, 'rb') as io:
             super().__init__(name=name, io=io)
+        log.info(f'Loaded \"{self.filename}\" as Region{name}')
 
     def save(self, destfile=None):
         if destfile is None:
             destfile = self.filename
+            log.info('No save destination specified.')
         else:
             n = re.search('r\.-?.\.-?.(?=\.mca)', destfile)
             if n is None:
@@ -55,3 +59,4 @@ class RegionFile(Region):
                             ' Minecraft will not be able to read this file!')
         with open(destfile, 'wb') as io:
             self.encodeRegion(io)
+        log.info(f'Saved Region{self.name} to \"{destfile}\"')
