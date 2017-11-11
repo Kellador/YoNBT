@@ -179,3 +179,6 @@ class Region(MutableMapping):
         return f'Region {self.name[0]}.{self.name[1]}\n' + \
             ('\n'.join([_convers(c) for c in self.chunks])
              if len(self.chunks) > 0 else '')
+
+    def getChunkByBlock(self, x, z):
+        return self[(x >> 4), (z >> 4)]
