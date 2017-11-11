@@ -1,8 +1,8 @@
 import gzip
 import logging
 import re
-from nbt import NBTObj
-from region import Region
+from .nbt import NBTObj
+from .region import Region
 
 log = logging.getLogger(__name__)
 

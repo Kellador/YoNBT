@@ -5,7 +5,7 @@ import time
 from io import BytesIO
 from struct import pack, unpack
 from collections.abc import MutableMapping
-from nbt import NBTObj
+from .nbt import NBTObj
 
 log = logging.getLogger(__name__)
 
