@@ -18,7 +18,7 @@ class ChunkException(Exception):
     pass
 
 
-class Chunk:
+class Chunk(MutableMapping):
     def __init__(self, x, z, **contents):
         self.x = x
         self.z = z
@@ -30,6 +30,26 @@ class Chunk:
         self.nbt = contents.pop('nbt', None)
         self.compressed = contents.pop('compressed', None)
         self.padding = contents.pop('padding', 0)
+
+    def __getitem__(self, key):
+        return self.nbt[key]
+
+    def __setitem__(self, key, value):
+        self.nbt[key] = value
+
+    def __delitem__(self, key):
+        del self.nbt[key]
+
+    def __iter__(self):
+        return iter(self.nbt)
+
+    def __len__(self):
+        return len(self.nbt)
+
+    def __str__(self):
+        return f'Chunk ({self.x}, {self.z})\n' + \
+            ('Entries:\n\t' + '\n\t'.join(self.nbt.keys())
+             if self.nbt is not None else '')
 
 
 class Region(MutableMapping):
@@ -151,3 +171,11 @@ class Region(MutableMapping):
 
     def __len__(self):
         return len(self.chunks)
+
+    def __str__(self):
+        def _convers(c):
+            inWorld = c[0] + (self.name[0] * 32), c[1] + (self.name[1] * 32)
+            return f'Chunk ({c[0]},{c[1]}) in World at {inWorld}'
+        return f'Region {self.name[0]}.{self.name[1]}\n' + \
+            ('\n'.join([_convers(c) for c in self.chunks])
+             if len(self.chunks) > 0 else '')
