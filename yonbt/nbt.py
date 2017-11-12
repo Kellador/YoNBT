@@ -339,12 +339,11 @@ class NBTObj(TAG_Compound):
             super().__init__(name=baseName, io=io)
 
     def __str__(self):
-        return 'NBTObj: ' + \
-            (f'{self.name}: ' if self.name else '') + \
-            '{\n\t' + '\n\t'.join([str(x) for x in self.value.values()]) + '\n\t}'
+        return (f'{self.name}: ' if self.name else '') + \
+            '\n\t{\n\t' + '\n\t'.join([str(x) for x in self.value.values()]) + '\n\t}'
 
-    def pretty(self):
-        print('BaseCompound: {\n' + '\n'.join(super().pretty(indent=1)) + '\n}')
+    def pretty(self, indent=1):
+        print('\t' * indent + 'BaseCompound: {\n' + '\t' * indent + '\n'.join(super().pretty(indent=indent)) + '\t' * indent + '\n}')
 
 
 tag = {

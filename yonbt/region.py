@@ -2,6 +2,7 @@ import logging
 import gzip
 import zlib
 import time
+import datetime
 from io import BytesIO
 from struct import pack, unpack
 from collections.abc import MutableMapping
@@ -47,9 +48,17 @@ class Chunk(MutableMapping):
         return len(self.nbt)
 
     def __str__(self):
-        return f'Chunk ({self.x}, {self.z})\n' + \
-            ('Entries:\n\t' + '\n\t'.join(self.nbt.keys())
-             if self.nbt is not None else '')
+        return f'Chunk ({self.x}, {self.z})' + \
+            (str(self.nbt) if self.nbt is not None else '')
+
+    def pretty(self):
+        print(f'Chunk ({self.x}, {self.z})')
+        print(f'  Offset: {self.offset}')
+        print(f'  Sectors: {self.sectors}')
+        print('  Timestamp: ' +
+              (datetime.datetime.fromtimestamp(self.timestamp).strftime("%B %d, %Y %I:%M:%S") if self.timestamp != 0 else 'Unknown!'))
+        print('  NBT: ')
+        self.nbt.pretty(indent=1)
 
 
 class Region(MutableMapping):
