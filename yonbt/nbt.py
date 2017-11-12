@@ -26,6 +26,14 @@ class TAGMixin:
             f'{self.value}'
 
 
+class ContainerTAGMixin:
+    def __str__(self):
+        return f'{tagNames[self.__class__.__name__]}: ' + \
+            (f'{self.name}: ' if self.name else '') + \
+            (f'{len(self.value)} Entries'
+             if len(self.value) > 1 else f'{len(self.value)} Entry')
+
+
 class TAG_End():
     pass
 
@@ -126,7 +134,7 @@ class TAG_Double(TAGMixin):
         self.encode(io, 'd', self.value)
 
 
-class TAG_Byte_Array(MutableSequence, TAGMixin):
+class TAG_Byte_Array(MutableSequence, ContainerTAGMixin, TAGMixin):
     def __init__(self, name=None, value=None, io=None):
         self.name = name
         if io is None:
@@ -157,11 +165,6 @@ class TAG_Byte_Array(MutableSequence, TAGMixin):
     def insert(self, index, value):
         self.value.insert(index, value)
 
-    def __str__(self):
-        return 'ByteArr: ' + \
-            (f'{self.name}: ' if self.name else '') + \
-            '[' + ' '.join([str(x) for x in self.value]) + ']'
-
 
 class TAG_String(TAGMixin):
     def __init__(self, name=None, value=None, io=None):
@@ -180,7 +183,7 @@ class TAG_String(TAGMixin):
         io.write(self.value.encode('utf-8'))
 
 
-class TAG_List(MutableSequence, TAGMixin):
+class TAG_List(MutableSequence, ContainerTAGMixin, TAGMixin):
     def __init__(self, name=None, value=None, tags_type=None, io=None):
         self.name = name
         if io is None:
@@ -222,11 +225,6 @@ class TAG_List(MutableSequence, TAGMixin):
     def insert(self, index, value):
         self.value.insert(index, value)
 
-    def __str__(self):
-        return 'List: ' + \
-            (f'{self.name}: ' if self.name else '') + \
-            '[\n\t' + '\n\t'.join([str(x) for x in self.value]) + ']'
-
     def pretty(self, indent=0):
         rep = []
         for v in self.value:
@@ -243,7 +241,7 @@ class TAG_List(MutableSequence, TAGMixin):
         return rep
 
 
-class TAG_Compound(MutableMapping, TAGMixin):
+class TAG_Compound(MutableMapping, ContainerTAGMixin, TAGMixin):
     def __init__(self, name=None, value=None, io=None):
         self.name = name
         if io is None:
@@ -281,11 +279,6 @@ class TAG_Compound(MutableMapping, TAGMixin):
     def __len__(self):
         return len(self.value)
 
-    def __str__(self):
-        return 'Compound: ' + \
-            (f'{self.name}: ' if self.name else '') + \
-            '{' + '\n\t'.join([str(x) for x in self.value.values()]) + '}'
-
     def pretty(self, indent=0):
         rep = []
         for k, v in self.value.items():
@@ -302,7 +295,7 @@ class TAG_Compound(MutableMapping, TAGMixin):
         return rep
 
 
-class TAG_Int_Array(MutableSequence, TAGMixin):
+class TAG_Int_Array(MutableSequence, ContainerTAGMixin, TAGMixin):
     def __init__(self, name=None, value=None, io=None):
         self.name = name
         if io is None:
@@ -336,11 +329,6 @@ class TAG_Int_Array(MutableSequence, TAGMixin):
     def insert(self, index, value):
         self.value.insert(index, value)
 
-    def __str__(self):
-        return 'IntArr: ' + \
-            (f'{self.name}: ' if self.name else '') + \
-            '[' + ' '.join([str(x) for x in self.value]) + ']'
-
 
 class NBTObj(TAG_Compound):
     def __init__(self, io=None):
@@ -349,6 +337,11 @@ class NBTObj(TAG_Compound):
                 raise NBTException("Invalid NBT Data!")
             baseName = self.decode_name(io)
             super().__init__(name=baseName, io=io)
+
+    def __str__(self):
+        return 'NBTObj: ' + \
+            (f'{self.name}: ' if self.name else '') + \
+            '{\n\t' + '\n\t'.join([str(x) for x in self.value.values()]) + '\n\t}'
 
     def pretty(self):
         print('BaseCompound: {\n' + '\n'.join(super().pretty(indent=1)) + '\n}')
@@ -380,6 +373,6 @@ tagNames = {
     'TAG_String': 'Str',
     'TAG_Compound': 'Co',
     'TAG_List': 'Li',
-    'TAG_Byte_Array': 'Ba',
-    'TAG_Int_Array': 'Ia'
+    'TAG_Byte_Array': 'BA',
+    'TAG_Int_Array': 'IA'
 }
