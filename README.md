@@ -37,59 +37,67 @@ region.save("/home/nbt/r.0.2.mca")
 region.save()
 ```
 
+### Structure
+In the following section we'll look at how to use the NBTFile and RegionFile objects, but for that you'll need to understand how those are structured underneath.
+
+This is a crude presentation:
+
+`NBTFile` : (represents an nbt file)
+- inherits `NBTObj` : (base tag for the content in an nbt file)
+  - inherits `TAG_Compound` : (representing a compound tag)
+    - contains other tags, including other compound tags, heavily nested
+
+`RegionFile` : (represents a region file)
+- inherits `Region` : (representation of the content in a region file)
+  - contains metadata and `Chunk`(s)
+
+`Chunk` : (represents a chunk)
+- contains metadata and an `NBTObj` (which inherits `TAG_Compound`... you get the idea)
+
+The two most important tags are for one, as you might have noticed,
+the `TAG_Compound` and also the `TAG_List`;
+Both these are important because they're the only tags that can contain other tags.
+
+`TAG_Compound` is a MutableMapping (a dictionary), holding tags with their names
+as their keys.
+
+`TAG_List` is a MutableSequence (a list), holding unnamed tags with only index keys.
+
+`Region` and `Chunk`, while not tags, are also MutableMappings (dictionaries).
+
+`Region` holds all the chunks in a region by the tuple of their x, z coordinates as the keys (these are chunk coordinates, NOT block coordinates, there's a difference).
+
+`Chunk` exposes the `NBTObj` within, so it works just like a `TAG_Compound`.
+
+Okay with that out of the way, let's move on!
+
 ### Editing
-Underneath NBTFile and RegionFile are the NBTObj and Region classes,
-which provide the actual editing functionalities
+Assuming you've already loaded up an nbt file and a region file as described
+in the Encoding and Decoding section above, you'll have yourself an
+`nbt` and a `region` variable.
 
 ```python
-# You can get a really simple string representation of each tag
-print(nbtCompound['Invulnerable'])
-> B: Invulnerable: 0
-# for Compounds or List it only prints the amount of entries.
+# You can print your nbt object:
+print(nbt)
+# giving you a very basic representation of the content within.
 
-# manipulate their values
-nbtCompound['Invulnerable'] = 1
+# Pretty-print a "tree" view:
+nbt.pretty()
+# giving you a nicer representation with indentation and everything.
 
-# create new tag entries from scratch
-from yonbt import TAG_String
-nbtCompound['WOW'] = TAG_String('WOW', 'what have I done?')
+# Fetch a tag within `nbt` by its name:
+someTag = nbt['someTag']
 
-# delete a tag completely
-nbtCompound.remove(nbtCompound['WOW'])
-# or, if you already hold the tag object itself
-nbtCompound.remove(someTag)
+# Print or pretty-print `someTag`:
+print(someTag)
 
-# Normally an NBTObj will contain several nested compound tags and list tags,
-# which will have their own nested compounds and lists,
-# but they can be accessed like regular dictionaries and regular lists respectively.
-nbtCompound['Inventory'][2]['id'] = 46
+# Edit `someTag`s value (make sure the value matches the type of tag):
+someTag.value = "over 9000!"
 
-# If you're getting turned around with all this nesting you can also print a
-# somewhat nicely formatted string representation of any compound or list tag.
-nbtCompound.pretty()
-
-
-# Region objects act like regular python dictionaries as well,
-# exposing all contained chunks, using a tuple of their (x, z) coordinates as the keys.
-
-# And because each chunk is itself an NBTObj, you can access and manipulate
-# any contained tag entries as you would with a generic NBTObj.
-
-print(region[(10, 0)]['Level']['LightPopulated'])
-> B: LightPopulated: 1
-
-# You can also delete a whole chunk entry
-del region[(1, 1)]
-
-# do note however, that the entry will not actually be removed;
-# Instead the chunk behind that key will be overwritten with an empty chunk.
-# This is to ensure that Minecraft will still recognize the file as valid
-# after it is encoded again.
-
-# And pretty print the chunk.
-chunk = region[12, 5]
-chunk.pretty()
-
+# Delete `someTag` from `nbt`:
+del nbt['someTag']
+# or, if you already hold the `someTag` object:
+nbt.remove(someTag)
 ```
 
 ### Utility Functions
