@@ -9,6 +9,7 @@ and the more complex region files, containing all the chunk data for a Minecraft
 Low level classes representing the underlying NBT structure, allowing you to create new tag entries in decoded NBT files
 or to create whole NBT files from scratch. Be sure to familiarize yourself with the [NBT Format](http://wiki.vg/NBT) beforehand.
 
+A few utility functions to make working with this library easier, especially if you're just using it from a Python REPL for quick edits.
 
 ## Basic Usage
 ### Encoding and Decoding
@@ -16,16 +17,16 @@ or to create whole NBT files from scratch. Be sure to familiarize yourself with 
 from yonbt import NBTFile, RegionFile
 
 # Load a generic nbt formatted file.
-genericNBT = NBTFile("/home/nbt/genericPlayer.dat")
+nbt = NBTFile("/home/nbt/genericPlayer.dat")
 
 # Save an NBTFile object back to file,
 # either providing a new target file:
-genericNBT.save("/home/nbt/genericPlayer2.dat")
+nbt.save("/home/nbt/genericPlayer2.dat")
 
 # or not providing any filename, in which case the original filename is used:
-genericNBT.save()
+nbt.save()
 # in this example this would be identical to:
-genericNBT.save("/home/nbt/genericPlayer.dat")
+nbt.save("/home/nbt/genericPlayer.dat")
 
 
 # Loading and saving region files (e.g. r.1.0.mca) follows the same pattern.
@@ -37,42 +38,41 @@ region.save()
 ```
 
 ### Editing
+Underneath NBTFile and RegionFile are the NBTObj and Region classes,
+which provide the actual editing functionalities
+
 ```python
-# NBTFile and RegionFile are childclasses of the NBTObj and Region classes,
-# which are the real meat doing all the decoding and encoding,
-# so anything you can do with NBTObj and Region you can do with NBTFile and RegionFile, too.
-
-# An NBTObj acts like a regular python dictionary, 
-# exposing all contained nbt entries with their names as the keys.
-
-# You can get a string representation of each tag
-print(genericNBT['Invulnerable'])
+# You can get a really simple string representation of each tag
+print(nbtCompound['Invulnerable'])
 > B: Invulnerable: 0
+# for Compounds or List it only prints the amount of entries.
 
 # manipulate their values
-genericNBT['Invulnerable'] = 1
+nbtCompound['Invulnerable'] = 1
 
 # create new tag entries from scratch
 from yonbt import TAG_String
-genericNBT['WOW'] = TAG_String('WOW', 'what have I done?')
+nbtCompound['WOW'] = TAG_String('WOW', 'what have I done?')
 
-# delete them completely
-del genericNBT['Score']
+# delete a tag completely
+nbtCompound.remove(nbtCompound['WOW'])
+# or, if you already hold the tag object itself
+nbtCompound.remove(someTag)
 
 # Normally an NBTObj will contain several nested compound tags and list tags,
-# which will have their own nested compounds and lists, 
+# which will have their own nested compounds and lists,
 # but they can be accessed like regular dictionaries and regular lists respectively.
-genericNBT['Inventory'][2]['id'] = 46
+nbtCompound['Inventory'][2]['id'] = 46
 
 # If you're getting turned around with all this nesting you can also print a
-# somewhat nicely formatted string representation of the entire NBTObj
-genericNBT.pretty()
+# somewhat nicely formatted string representation of any compound or list tag.
+nbtCompound.pretty()
 
 
 # Region objects act like regular python dictionaries as well,
 # exposing all contained chunks, using a tuple of their (x, z) coordinates as the keys.
 
-# And because each chunk is itself an NBTObj, you can access and manipulate 
+# And because each chunk is itself an NBTObj, you can access and manipulate
 # any contained tag entries as you would with a generic NBTObj.
 
 print(region[(10, 0)]['Level']['LightPopulated'])
@@ -85,4 +85,44 @@ del region[(1, 1)]
 # Instead the chunk behind that key will be overwritten with an empty chunk.
 # This is to ensure that Minecraft will still recognize the file as valid
 # after it is encoded again.
+
+# And pretty print the chunk.
+chunk = region[12, 5]
+chunk.pretty()
+
+```
+
+### Utility Functions
+```python
+chunkByBlock(x, z)
+# returns a tuple of two integers, which is the same coordinate of the chunk
+# that the given block is in.
+# You could use it like this, to get the chunk of block x,z from a region:
+region[chunkByBlock(10, -24)]
+# If the block is not in that region then a KeyError will be raised.
+
+regionByBlock(x, z)
+# returns a string with the name of the region that the block is in.
+# like so: 'r.1.-5.mca', you could use this directly like this:
+region = RegionFile(regionByBlock(x, z))
+
+regionByChunk(x, z)
+# same deal, just that here x, z are the coordinates of the chunk, not any block.
+
+getTileEntity(x, z, region)
+# or
+getTileEntity(x, z, chunk)
+# this returns a tuple consisting of the tag for the tile entity, with the given
+# coordinates, and the list that it is contained in: (entity, listContainingEntity)
+# You also pass in either a Region or Chunk object, that you have
+# instantiated beforehand. Just passing in the string returned by regionByBlock
+# won't work.
+
+deleteTileEntity(x, z, region)
+# or
+deleteTileEntity(x, z, chunk)
+# same deal as getTileEntity, but this deletes the tag for the tile entity.
+# Good for quick edits, for example when a tile entity is causing crashes.
+# Note that this function does not handle saving the change, you gotta save
+# the region file back yourself, as described above.
 ```
