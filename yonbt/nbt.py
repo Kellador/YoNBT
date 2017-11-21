@@ -225,20 +225,24 @@ class TAG_List(MutableSequence, ContainerTAGMixin, TAGMixin):
     def insert(self, index, value):
         self.value.insert(index, value)
 
-    def pretty(self, indent=0):
+    def prettyfy(self, indent=0):
         rep = []
         for v in self.value:
             if isinstance(v, TAG_Compound):
                 rep.append('\t' * indent + '{')
-                rep.extend(v.pretty(indent=indent + 1))
+                rep.extend(v.prettyfy(indent=indent + 1))
                 rep.append('\t' * indent + '}')
             elif isinstance(v, TAG_List):
                 rep.append('\t' * indent + '[')
-                rep.extend(v.pretty(indent=indent + 1))
+                rep.extend(v.prettyfy(indent=indent + 1))
                 rep.append('\t' * indent + ']')
             else:
                 rep.append('\t' * indent + str(v))
         return rep
+
+    def pretty(self, indent=0):
+        for s in self.prettyfy():
+            print(s)
 
 
 class TAG_Compound(MutableMapping, ContainerTAGMixin, TAGMixin):
@@ -279,20 +283,24 @@ class TAG_Compound(MutableMapping, ContainerTAGMixin, TAGMixin):
     def __len__(self):
         return len(self.value)
 
-    def pretty(self, indent=0):
+    def prettyfy(self, indent=0):
         rep = []
         for k, v in self.value.items():
             if isinstance(v, TAG_Compound):
                 rep.append('\t' * indent + str(k) + ': {')
-                rep.extend(v.pretty(indent=indent + 1))
+                rep.extend(v.prettyfy(indent=indent + 1))
                 rep.append('\t' * indent + '}')
             elif isinstance(v, TAG_List):
                 rep.append('\t' * indent + str(k) + ': [')
-                rep.extend(v.pretty(indent=indent + 1))
+                rep.extend(v.prettyfy(indent=indent + 1))
                 rep.append('\t' * indent + ']')
             else:
                 rep.append('\t' * indent + str(v))
         return rep
+
+    def pretty(self, indent=0):
+        for s in self.prettyfy():
+            print(s)
 
 
 class TAG_Int_Array(MutableSequence, ContainerTAGMixin, TAGMixin):
@@ -343,7 +351,7 @@ class NBTObj(TAG_Compound):
             '\n\t{\n\t' + '\n\t'.join([str(x) for x in self.value.values()]) + '\n\t}'
 
     def pretty(self, indent=1):
-        print('\t' * indent + 'BaseCompound: {\n' + '\t' * indent + '\n'.join(super().pretty(indent=indent)) + '\t' * indent + '\n}')
+        print('\t' * indent + 'BaseCompound: {\n' + '\t' * indent + '\n'.join(super().prettyfy(indent=indent)) + '\t' * indent + '\n}')
 
 
 tag = {

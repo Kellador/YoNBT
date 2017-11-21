@@ -11,10 +11,6 @@ from .nbt import NBTObj
 log = logging.getLogger(__name__)
 
 
-class RegionException(Exception):
-    pass
-
-
 class ChunkException(Exception):
     pass
 
