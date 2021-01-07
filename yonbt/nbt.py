@@ -338,6 +338,41 @@ class TAG_Int_Array(MutableSequence, ContainerTAGMixin, TAGMixin):
         self.value.insert(index, value)
 
 
+class TAG_Long_Array(MutableSequence, ContainerTAGMixin, TAGMixin):
+    def __init__(self, name=None, value=None, io=None):
+        self.name = name
+        if io is None:
+            self.value = value
+        else:
+            self.value = []
+            for _ in range(self.decode(io, 'i', 4)[0]):
+                self.value.append(self.decode(io, 'q', 8)[0])
+
+    def saveNBT(self, io, typed=True):
+        if typed:
+            self.encode(io, 'b', 12)
+        if self.name is not None:
+            self.encode_name(io)
+        self.encode(io, 'i', len(self.value))
+        for i in self.value:
+            self.encode(io, 'q', i)
+
+    def __getitem__(self, index):
+        return self.value[index]
+
+    def __setitem__(self, index, value):
+        self.value[index] = value
+
+    def __delitem__(self, index):
+        del self.value[index]
+
+    def __len__(self):
+        return len(self.value)
+
+    def insert(self, index, value):
+        self.value.insert(index, value)
+
+
 class NBTObj(TAG_Compound):
     def __init__(self, io=None):
         if io is not None:
@@ -366,7 +401,8 @@ tag = {
     8: TAG_String,
     9: TAG_List,
     10: TAG_Compound,
-    11: TAG_Int_Array
+    11: TAG_Int_Array,
+    12: TAG_Long_Array
 }
 
 
@@ -381,5 +417,6 @@ tagNames = {
     'TAG_Compound': 'Co',
     'TAG_List': 'Li',
     'TAG_Byte_Array': 'BA',
-    'TAG_Int_Array': 'IA'
+    'TAG_Int_Array': 'IA',
+    'TAG_Long_Array': 'LA'
 }
