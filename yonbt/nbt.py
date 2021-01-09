@@ -21,17 +21,14 @@ class TAG:
         return io.read(unpack(">H", io.read(2))[0]).decode('utf-8')
 
     def __str__(self):
-        return f'{tagNames[self.__class__.__name__]}: ' + \
-            (f'{self.name}: ' if self.name else '') + \
-            f'{self.value}'
-
-
-class ContainerTAGMixin:
-    def __str__(self):
-        return f'{tagNames[self.__class__.__name__]}: ' + \
-            (f'{self.name}: ' if self.name else '') + \
-            (f'{len(self.value)} Entries'
-             if len(self.value) > 1 else f'{len(self.value)} Entry')
+        if self.__class__ in SequenceTAG.__subclasses__() or self.__class__.__name__ == 'TAG_Compound':
+            return f'{tagNames[self.__class__.__name__]}: ' + \
+                (f'{self.name}: ' if self.name else '') + \
+                (f'{len(self.values)} Entries' if len(self.values) > 1 else f'{len(self.values)} Entry')
+        else:
+            return f'{tagNames[self.__class__.__name__]}: ' + \
+                (f'{self.name}: ' if self.name else '') + \
+                f'{self.value}'
 
 
 class SequenceTAG(MutableSequence):
