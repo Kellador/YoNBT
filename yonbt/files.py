@@ -59,4 +59,4 @@ class RegionFile(Region):
                             ' Minecraft will not be able to read this file!')
         with open(destfile, 'wb') as io:
             self.encodeRegion(io)
-        log.info(f'Saved Region{self.name} to \"{destfile}\"')
+        log.info(f'Saved Region {self.name} to \"{destfile}\"')

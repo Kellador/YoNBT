@@ -20,35 +20,35 @@ class TAG:
     def decode_name(self, io):
         return io.read(unpack(">H", io.read(2))[0]).decode('utf-8')
 
-    def __str__(self):
-        if self.__class__ in SequenceTAG.__subclasses__() or self.__class__.__name__ == 'TAG_Compound':
-            return f'{tagNames[self.__class__.__name__]}: ' + \
-                (f'{self.name}: ' if self.name else '') + \
-                (f'{len(self.values)} Entries' if len(self.values) > 1 else f'{len(self.values)} Entry')
-        else:
-            return f'{tagNames[self.__class__.__name__]}: ' + \
-                (f'{self.name}: ' if self.name else '') + \
-                f'{self.value}'
+    def __repr__(self):
+        return f'{tagNames[self.__class__.__name__]}: ' + \
+            (f'{self.name}: ' if self.name else '') + f'{self.value}'
 
 
 class SequenceTAG(MutableSequence):
-    def __init__(self, values):
-        self.values = values
+    def __init__(self, value):
+        self.value = value
 
     def __getitem__(self, index):
-        return self.values[index]
+        return self.value[index]
 
     def __setitem__(self, index, value):
-        self.values[index] = value
+        self.value[index] = value
 
     def __delitem__(self, index):
-        del self.values[index]
+        del self.value[index]
 
     def __len__(self):
-        return len(self.values)
+        return len(self.value)
 
     def insert(self, index, value):
-        self.values.insert(index, value)
+        self.value.insert(index, value)
+
+    def __repr__(self):
+        length = len(self.value)
+        return f'{tagNames[self.__class__.__name__]}: ' + \
+               (f'{self.name}: ' if self.name else '') + \
+               (f'{length} Entry' if length == 1 else f'{length} Entries')
 
 
 class TAG_End():
@@ -151,21 +151,30 @@ class TAG_Double(TAG):
         self.encode(io, 'd', self.value)
 
 
-class TAG_Byte_Array(TAG, SequenceTAG):
-    def __init__(self, name=None, values=None, io=None):
+class TAG_Byte_Array(TAG):
+    def __init__(self, name=None, value=None, io=None):
         self.name = name
         if io is None:
-            super().__init__(values)
+            self.value = value
         else:
-            super().__init__(bytearray(io.read(self.decode(io, 'i', 4)[0])))
+            self.value = bytearray(io.read(self.decode(io, 'i', 4)[0]))
 
     def saveNBT(self, io, typed=True):
         if typed:
             self.encode(io, 'b', 7)
         if self.name is not None:
             self.encode_name(io)
-        self.encode(io, 'i', len(self.values))
-        io.write(self.values)
+        self.encode(io, 'i', len(self.value))
+        io.write(self.value)
+
+    def __repr__(self):
+        length = len(self.value)
+        return f'{tagNames[self.__class__.__name__]}: ' + \
+               (f'{self.name}: ' if self.name else '') + \
+               (f'{length} Entry' if length == 1 else f'{length} Entries')
+
+    def __str__(self):
+        return repr(self) + '[\n\t' + self.value.hex(' ') + '\n]'
 
 
 class TAG_String(TAG):
@@ -185,149 +194,172 @@ class TAG_String(TAG):
         io.write(self.value.encode('utf-8'))
 
 
-class TAG_List(TAG, SequenceTAG):
-    def __init__(self, name=None, values=None, tags_type=None, io=None):
+class TAG_List(SequenceTAG, TAG):
+    def __init__(self, name=None, value=None, tags_type=None, io=None):
         self.name = name
         if io is None:
-            super().__init__(values)
+            super().__init__(value)
             self.tags_type = tags_type
         else:
             super().__init__([])
             self.tags_type = self.decode(io, 'b', 1)[0]
             self.list_size = self.decode(io, 'i', 4)[0]
             for _ in range(self.list_size):
-                self.values.append(tag[self.tags_type](io=io))
+                self.value.append(tag[self.tags_type](io=io))
 
     def saveNBT(self, io, typed=True):
         if typed:
             self.encode(io, 'b', 9)
         if self.name is not None:
             self.encode_name(io)
-        if len(self.values) > 0:
+        if len(self.value) > 0:
             self.encode(io, 'b', self.tags_type)
             self.encode(io, 'i', self.list_size)
-            for i in self.values:
+            for i in self.value:
                 i.saveNBT(io, typed=False)
         else:
             self.encode(io, 'b', 0)
             self.encode(io, 'i', 0)
 
-    def prettyfy(self, indent=0):
+    def __str__(self):
+        return repr(self) + '{\n\t' + '\n\t'.join([f'[{idx}] {repr(tag)}' for idx, tag in enumerate(self.value)]) + '\n}'
+
+    def pretty(self, indent=0):
         rep = []
-        for v in self.values:
+        for v in self.value:
             if isinstance(v, TAG_Compound):
                 rep.append('\t' * indent + '{')
-                rep.extend(v.prettyfy(indent=indent + 1))
+                rep.extend(v.pretty(indent=indent + 1))
                 rep.append('\t' * indent + '}')
             elif isinstance(v, TAG_List):
                 rep.append('\t' * indent + '[')
-                rep.extend(v.prettyfy(indent=indent + 1))
+                rep.extend(v.pretty(indent=indent + 1))
                 rep.append('\t' * indent + ']')
             else:
                 rep.append('\t' * indent + str(v))
         return rep
 
-    def pretty(self, indent=0):
-        for s in self.prettyfy():
+    def pprint(self, indent=0):
+        for s in self.pretty():
             print(s)
 
 
 class TAG_Compound(MutableMapping, TAG):
-    def __init__(self, name=None, values=None, io=None):
+    def __init__(self, name=None, value=None, io=None):
         self.name = name
         if io is None:
-            self.values = values
+            self.value = value
         else:
-            self.values = {}
+            self.value = {}
             while True:
                 typeID = self.decode(io, 'b', 1)[0]
                 if typeID == 0:
                     break
                 tagName = self.decode_name(io)
-                self.values[tagName] = tag[typeID](name=tagName, io=io)
+                self.value[tagName] = tag[typeID](name=tagName, io=io)
 
     def saveNBT(self, io, typed=True):
         if typed:
             self.encode(io, 'b', 10)
         if self.name is not None:
             self.encode_name(io)
-        for i in self.values.values():
+        for i in self.value.values():
             i.saveNBT(io)
         self.encode(io, 'b', 0)
 
     def __getitem__(self, key):
-        return self.values[key]
+        return self.value[key]
 
     def __setitem__(self, key, value):
-        self.values[key] = value
+        self.value[key] = value
 
     def __delitem__(self, key):
-        del self.values[key]
+        del self.value[key]
 
     def __iter__(self):
-        return iter(self.values)
+        return iter(self.value)
 
     def __len__(self):
-        return len(self.values)
+        return len(self.value)
 
-    def prettyfy(self, indent=0):
+    def __repr__(self):
+        length = len(self.value)
+        try:
+            tagname = tagNames[self.__class__.__name__]
+        except KeyError:
+            tagname = 'OuterCompound'
+        finally:
+            return f'{tagname}: ' + \
+                (f'{self.name}: ' if self.name else '') + \
+                (f'{length} Entry' if length == 1 else f'{length} Entries')
+
+    def __str__(self):
+        return repr(self) + '{\n\t' + '\n\t'.join([repr(tag) for tag in self.value.values()]) + '\n}'
+
+    def pretty(self, indent=0):
         rep = []
-        for k, v in self.values.items():
+        for k, v in self.value.items():
             if isinstance(v, TAG_Compound):
                 rep.append('\t' * indent + str(k) + ': {')
-                rep.extend(v.prettyfy(indent=indent + 1))
+                rep.extend(v.pretty(indent=indent + 1))
                 rep.append('\t' * indent + '}')
             elif isinstance(v, TAG_List):
                 rep.append('\t' * indent + str(k) + ': [')
-                rep.extend(v.prettyfy(indent=indent + 1))
+                rep.extend(v.pretty(indent=indent + 1))
                 rep.append('\t' * indent + ']')
             else:
                 rep.append('\t' * indent + str(v))
         return rep
 
-    def pretty(self, indent=0):
-        for s in self.prettyfy():
+    def pprint(self, indent=0):
+        for s in self.pretty():
             print(s)
 
 
-class TAG_Int_Array(TAG, SequenceTAG):
-    def __init__(self, name=None, values=None, io=None):
+class TAG_Int_Array(SequenceTAG, TAG):
+    def __init__(self, name=None, value=None, io=None):
         self.name = name
         if io is None:
-            super().__init__(values)
+            super().__init__(value)
         else:
             super().__init__([])
             for _ in range(self.decode(io, 'i', 4)[0]):
-                self.values.append(self.decode(io, 'i', 4)[0])
+                self.value.append(self.decode(io, 'i', 4)[0])
 
     def saveNBT(self, io, typed=True):
         if typed:
             self.encode(io, 'b', 11)
         if self.name is not None:
             self.encode_name(io)
-        self.encode(io, 'i', len(self.values))
-        for i in self.values:
+        self.encode(io, 'i', len(self.value))
+        for i in self.value:
             self.encode(io, 'i', i)
 
+    def __str__(self):
+        return repr(self) + '[\n\t' + ' '.join(self.value) + '\n]'
 
-class TAG_Long_Array(TAG, SequenceTAG):
-    def __init__(self, name=None, values=None, io=None):
+
+class TAG_Long_Array(SequenceTAG, TAG):
+    def __init__(self, name=None, value=None, io=None):
         self.name = name
         if io is None:
-            super().__init__(values)
+            super().__init__(value)
         else:
             super().__init__([])
             for _ in range(self.decode(io, 'i', 4)[0]):
-                self.values.append(self.decode(io, 'q', 8)[0])
+                self.value.append(self.decode(io, 'q', 8)[0])
 
     def saveNBT(self, io, typed=True):
         if typed:
             self.encode(io, 'b', 12)
         if self.name is not None:
             self.encode_name(io)
-        self.encode(io, 'i', len(self.values))
-        for i in self.values:
+        self.encode(io, 'i', len(self.value))
+        for i in self.value:
             self.encode(io, 'q', i)
+
+    def __str__(self):
+        return repr(self) + '[\n\t' + ' '.join(self.value) + '\n]'
 
 
 class NBTObj(TAG_Compound):
@@ -338,12 +370,8 @@ class NBTObj(TAG_Compound):
             baseName = self.decode_name(io)
             super().__init__(name=baseName, io=io)
 
-    def __str__(self):
-        return (f'{self.name}: ' if self.name else '') + \
-            '\n\t{\n\t' + '\n\t'.join([str(x) for x in self.value.values()]) + '\n\t}'
-
-    def pretty(self, indent=1):
-        print('\t' * indent + 'BaseCompound: {\n' + '\t' * indent + '\n'.join(super().prettyfy(indent=indent)) + '\t' * indent + '\n}')
+    def pprint(self, indent=1):
+        print('\t' * indent + 'BaseCompound: {\n' + '\t' * indent + '\n'.join(super().pretty(indent=indent)) + '\t' * indent + '\n}')
 
 
 tag = {
