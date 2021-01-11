@@ -206,8 +206,7 @@ class TAG_List(SequenceTAG, TAG):
         else:
             super().__init__([])
             self.tags_type = self.decode(io, 'b', 1)[0]
-            self.list_size = self.decode(io, 'i', 4)[0]
-            for _ in range(self.list_size):
+            for _ in range(self.decode(io, 'i', 4)[0]):
                 self.value.append(tag[self.tags_type](io=io))
 
     def saveNBT(self, io, typed=True):
@@ -217,7 +216,7 @@ class TAG_List(SequenceTAG, TAG):
             self.encode_name(io)
         if len(self.value) > 0:
             self.encode(io, 'b', self.tags_type)
-            self.encode(io, 'i', self.list_size)
+            self.encode(io, 'i', len(self.value))
             for i in self.value:
                 i.saveNBT(io, typed=False)
         else:

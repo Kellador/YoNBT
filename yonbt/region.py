@@ -45,7 +45,7 @@ class Chunk(MutableMapping):
 
     def __str__(self):
         return f'Chunk ({self.x}, {self.z})' + \
-            (str(self.nbt) if self.nbt is not None else '')
+            (f' {str(self.nbt)}' if self.nbt is not None else '')
 
     def pretty(self):
         print(f'Chunk ({self.x}, {self.z})')
