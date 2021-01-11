@@ -1,6 +1,8 @@
 from struct import pack, unpack
 from collections.abc import MutableMapping, MutableSequence
 
+from mutf8 import encode_modified_utf8, decode_modified_utf8
+
 
 class NBTException(Exception):
     pass
@@ -15,10 +17,10 @@ class TAG:
 
     def encode_name(self, io):
         io.write(pack(">H", len(self.name)))
-        io.write(self.name.encode('utf-8'))
+        io.write(encode_modified_utf8(self.name))
 
     def decode_name(self, io):
-        return io.read(unpack(">H", io.read(2))[0]).decode('utf-8')
+        return decode_modified_utf8(io.read(unpack(">H", io.read(2))[0]))
 
     def __repr__(self):
         return f'{tagNames[self.__class__.__name__]}: ' + \
@@ -190,8 +192,9 @@ class TAG_String(TAG):
             self.encode(io, 'b', 8)
         if self.name is not None:
             self.encode_name(io)
-        io.write(pack(">H", len(self.value.encode('utf-8'))))
-        io.write(self.value.encode('utf-8'))
+        encoded = encode_modified_utf8(self.value)
+        io.write(pack(">H", len(encoded)))
+        io.write(encoded)
 
 
 class TAG_List(SequenceTAG, TAG):

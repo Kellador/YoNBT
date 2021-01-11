@@ -5,6 +5,9 @@ setup(
     version='1.0.0a1',
     url='https://github.com/Kellador/YoNBT',
     packages=['yonbt'],
+    install_requires=[
+        'mutf8'
+    ],
     python_requires='>=3.6',
     author='Kellador',
     license='MIT',
