@@ -1,6 +1,7 @@
 import gzip
 import logging
 import re
+from pathlib import Path
 from .nbt import NBTObj
 from .region import Region
 
@@ -38,7 +39,11 @@ class NBTFile(NBTObj):
 class RegionFile(Region):
     def __init__(self, filename):
         self.filename = filename
-        n = re.search('r\.(?P<x>-?.)\.(?P<z>-?.)(?=\.mca)', filename)
+        if isinstance(filename, Path):
+            tn = filename.name
+        else:
+            tn = filename
+        n = re.search('r\.(?P<x>-?.)\.(?P<z>-?.)(?=\.mca)', tn)
         if n is None:
             log.warning('Invalid region filename!')
             name = 0, 0
