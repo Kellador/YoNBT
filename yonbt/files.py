@@ -55,7 +55,7 @@ class RegionFile(Region):
         with open(self.filename, 'rb') as io:
             self.decode(io)
 
-        log.info(f'Loaded \"{self.filename}\" as Region{coords}')
+        log.debug(f'Loaded \"{self.filename}\" as Region{coords}')
 
     def save(self, destfile=None):
         if destfile is None:
@@ -69,4 +69,4 @@ class RegionFile(Region):
         with open(destfile, 'wb') as io:
             self.encode(io)
 
-        log.info(f'Saved Region to \"{destfile}\"')
+        log.debug(f'Saved Region to \"{destfile}\"')
