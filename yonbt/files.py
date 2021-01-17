@@ -44,7 +44,7 @@ class RegionFile(Region):
         else:
             tn = filename
 
-        n = re.search('r\.(?P<x>-?.)\.(?P<z>-?.)(?=\.mca)', tn)
+        n = re.search('r\.(?P<x>-?.+)\.(?P<z>-?.+)(?=\.mca)', tn)
         if n is None:
             log.warning('Invalid region filename!')
             coords = 0, 0
