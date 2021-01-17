@@ -60,7 +60,6 @@ class RegionFile(Region):
     def save(self, destfile=None):
         if destfile is None:
             destfile = self.filename
-            log.info('No save destination specified.')
         else:
             n = re.search('r\.-?.\.-?.(?=\.mca)', destfile)
             if n is None:
