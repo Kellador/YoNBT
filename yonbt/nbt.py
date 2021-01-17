@@ -1,4 +1,5 @@
 from struct import pack, unpack
+from struct import error as structerror
 from collections.abc import MutableMapping, MutableSequence
 
 from mutf8 import encode_modified_utf8, decode_modified_utf8
@@ -369,8 +370,12 @@ class NBTObj(TAG_Compound):
         if io is not None:
             if self.decode(io, 'b', 1)[0] != 10:
                 raise NBTException("Invalid NBT Data!")
-            baseName = self.decode_name(io)
-            super().__init__(name=baseName, io=io)
+            try:
+                baseName = self.decode_name(io)
+                super().__init__(name=baseName, io=io)
+            except structerror as e:
+                raise NBTException('The following struct.error was raised '
+                                   f'during decoding: {e}')
 
     def pprint(self, indent=1):
         print('\t' * indent + 'BaseCompound: {\n' + '\t' * indent + '\n'.join(super().pretty(indent=indent)) + '\t' * indent + '\n}')

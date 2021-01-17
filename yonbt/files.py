@@ -43,15 +43,19 @@ class RegionFile(Region):
             tn = filename.name
         else:
             tn = filename
+
         n = re.search('r\.(?P<x>-?.)\.(?P<z>-?.)(?=\.mca)', tn)
         if n is None:
             log.warning('Invalid region filename!')
-            name = 0, 0
+            coords = 0, 0
         else:
-            name = int(n.group('x')), int(n.group('z'))
+            coords = int(n.group('x')), int(n.group('z'))
+
+        super().__init__(coords)
         with open(self.filename, 'rb') as io:
-            super().__init__(name=name, io=io)
-        log.info(f'Loaded \"{self.filename}\" as Region{name}')
+            self.decode(io)
+
+        log.info(f'Loaded \"{self.filename}\" as Region{coords}')
 
     def save(self, destfile=None):
         if destfile is None:
@@ -62,6 +66,8 @@ class RegionFile(Region):
             if n is None:
                 log.warning('Invalid region filename!'
                             ' Minecraft will not be able to read this file!')
+
         with open(destfile, 'wb') as io:
-            self.encodeRegion(io)
-        log.info(f'Saved Region {self.name} to \"{destfile}\"')
+            self.encode(io)
+
+        log.info(f'Saved Region to \"{destfile}\"')

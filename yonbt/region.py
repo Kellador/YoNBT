@@ -2,188 +2,348 @@ import logging
 import gzip
 import zlib
 import time
-import datetime
+
 from io import BytesIO
 from struct import pack, unpack
 from collections.abc import MutableMapping
-from .nbt import NBTObj
+from enum import Enum, unique
+
+from typing import NamedTuple, Tuple, Optional
+
+from .nbt import NBTObj, NBTException
 
 log = logging.getLogger(__name__)
 
 
-class ChunkException(Exception):
-    pass
+SECTOR_LEN = 4096
 
 
-class Chunk(MutableMapping):
-    def __init__(self, x, z, **contents):
-        self.x = x
-        self.z = z
-        self.offset = contents.pop('offset', 0)
-        self.sectors = contents.pop('sectors', 0)
-        self.timestamp = contents.pop('timestamp', 0)
-        self.length = contents.pop('length', 0)
-        self.compression = contents.pop('compression', 2)
-        self.nbt = contents.pop('nbt', None)
-        self.compressed = contents.pop('compressed', None)
-        self.padding = contents.pop('padding', 0)
+@unique
+class ChunkState(Enum):
+    CORRUPTED = -3
+    OVERLAPPING = -2
+    TOO_BIG = -1
+    OK = 0
+    NOT_CREATED = 1
 
-    def __getitem__(self, key):
-        return self.nbt[key]
 
-    def __setitem__(self, key, value):
-        self.nbt[key] = value
+@unique
+class Compression(Enum):
+    GZIP = 1
+    ZLIB = 2
+    NONE = 3
 
-    def __delitem__(self, key):
-        del self.nbt[key]
 
-    def __iter__(self):
-        return iter(self.nbt)
+class Coordinates(NamedTuple):
+    x: int
+    z: int
 
-    def __len__(self):
-        return len(self.nbt)
+    def __repr__(self):
+        return f'({self.x}, {self.y})'
 
-    def __str__(self):
-        return f'Chunk ({self.x}, {self.z})' + \
-            (f' {str(self.nbt)}' if self.nbt is not None else '')
 
-    def pretty(self):
-        print(f'Chunk ({self.x}, {self.z})')
-        print(f'  Offset: {self.offset}')
-        print(f'  Sectors: {self.sectors}')
-        print('  Timestamp: ' +
-              (datetime.datetime.fromtimestamp(self.timestamp).strftime("%B %d, %Y %I:%M:%S") if self.timestamp != 0 else 'Unknown!'))
-        print('  NBT: ')
-        self.nbt.pretty(indent=1)
+class Chunk(NBTObj):
+
+    def __init__(self, x: int, z: int):
+        self.coords = Coordinates(x, z)
+        self._entryloc = None
+
+        self.offset = 0
+        self._sectors = 0
+
+        self._timestamp = 0
+
+        self._length = 0
+        self._compression = Compression.NONE
+
+        self._data = None
+
+        self._state = ChunkState.NOT_CREATED
+
+        self._padding = 0
+
+    @property
+    def entryloc(self) -> int:
+        if self._entryloc is None:
+            self._entryloc = (self.coords.x + self.coords.z * 32) * 4
+        return self._entryloc
+
+    @property
+    def neighbour(self) -> Optional[Tuple[int, int]]:
+        z = (self.coords.z + 1) % 32
+        x = (self.coords.x + 1) if z == 0 else self.coords.x
+        if x == 32:
+            return None
+        else:
+            return x, z
+
+    @staticmethod
+    def _calc_sectors(length):
+        whole, remaining = divmod(length + 5, SECTOR_LEN)
+        return whole if remaining == 0 else whole + 1
+
+    @property
+    def sectors(self) -> int:
+        length = self.length
+        if length:
+            sectors = self._calc_sectors(length)
+            self._sectors = sectors
+
+            if sectors > 255:
+                self._state = ChunkState.TOO_BIG
+            elif self._state is ChunkState.TOO_BIG:
+                self._state = ChunkState.OK
+
+        return self._sectors
+
+    @property
+    def timestamp(self) -> int:
+        self._timestamp = int(time.time())
+        return self._timestamp
+
+    @property
+    def length(self) -> int:
+        data = self.data
+        if data:
+            self._length = len(data)
+        return self._length
+
+    @property
+    def data(self) -> BytesIO:
+        if hasattr(self, 'value'):
+            if self.value:
+                with BytesIO() as raw:
+                    self.saveNBT(io=raw)
+                    if self._compression is Compression.ZLIB:
+                        self._data = zlib.compress(raw.getvalue())
+                    elif self._compression is Compression.GZIP:
+                        self._data = gzip.compress(raw.getvalue())
+                    else:
+                        self._data = raw.getvalue()
+                self._state = ChunkState.OK
+                return self._data
+
+        if self._state is ChunkState.OK:
+            self._state = ChunkState.NOT_CREATED
+        self._data = None
+        return self._data
+
+    @property
+    def compression(self) -> Compression:
+        return self._compression
+
+    @property
+    def state(self) -> ChunkState:
+        """Re-evalutes the chunk's state
+
+        This property is a bit of a cheat actually,
+        by getting the padding property it starts off
+        a chain where all properties relevant to the state
+        are called, they all update themselves and evaluate
+        the state based on their new value.
+
+        Returns
+        -------
+        ChunkState
+            an enum representing the chunk's state
+        """
+
+        _ = self.padding
+        return self._state
+
+    @property
+    def padding(self) -> int:
+        self._padding = (self.sectors * SECTOR_LEN) - self._length - 5
+        return self._padding
+
+    def _decode_region_entry(self, io: BytesIO) -> None:
+        io.seek(self.entryloc)
+        offset, sectors = unpack('>IB', b'\x00' + io.read(4))
+        self.offset, self._sectors = offset, sectors
+
+        # determine viability based on region header entry
+        # NOT_CREATED simply means the chunk is not yet generated,
+        # CORRUPTED state allows no further decoding,
+        # TOO_BIG will be checked again later
+        if offset == 0 and sectors == 0:
+            self._state = ChunkState.NOT_CREATED
+        elif sectors == 0:
+            self._state = ChunkState.CORRUPTED
+        elif offset < 2:
+            self._state = ChunkState.CORRUPTED
+        elif sectors * SECTOR_LEN + 5 > io.seek(0, 2):
+            self._state = ChunkState.CORRUPTED
+        elif sectors > 255:
+            self._state = ChunkState.TOO_BIG
+        else:
+            self._state = ChunkState.OK
+
+        io.seek(self.entryloc + SECTOR_LEN)
+        self._timestamp = unpack('>I', io.read(4))[0]
+
+    def _decode_header(self, io: BytesIO) -> None:
+        io.seek(self.offset * SECTOR_LEN)
+        length = unpack('>I', io.read(4))[0]
+        self._length = length
+
+        # check for a missmatch between actually required sectors
+        # and allocated sectors as given by the region header entry;
+        # if more sectors are required than have been allocated
+        # then, depending on write order, this chunk might overlap
+        # into another, or the other way around
+        sectors = self._calc_sectors(length)
+        if sectors > self._sectors and self._state:
+            self._state = ChunkState.OVERLAPPING
+
+        # check if previously determined TOO_BIG state was wrong
+        if self._state is ChunkState.TOO_BIG and sectors <= 255:
+            self._sectors = sectors
+            self._state = ChunkState.OK
+
+        # a length of 1 or less means there is no data in the chunk
+        if length <= 1:
+            self._state = ChunkState.CORRUPTED
+
+        comp = unpack('>B', io.read(1))[0]
+        try:
+            self._compression = Compression(comp)
+        except ValueError:
+            log.critical(f'Invalid compression type: {comp}')
+            self._state = ChunkState.CORRUPTED
+
+    def _decode_nbt(self, io: BytesIO) -> None:
+        io.seek(self.offset * SECTOR_LEN + 5)
+        try:
+            with BytesIO() as tmpio:
+                if self.compression is Compression.ZLIB:
+                    tmpio.write(zlib.decompress(io.read(self._length - 1)))
+                elif self.compression is Compression.GZIP:
+                    tmpio.write(gzip.decompress(io.read(self._length - 1)))
+                else:  # Compression is NONE
+                    tmpio.write(io.read(self._length - 1))
+                tmpio.seek(0)
+                super().__init__(tmpio)
+        except IOError as e:
+            log.critical(f'Error decoding chunk {self.coords}')
+            log.critical(e)
+        except NBTException as e:
+            log.critical(f'Decoding data of chunk {self.coords} failed')
+            log.critical(e)
+            if self._state is ChunkState.OVERLAPPING:
+                log.info('This is likely a result of another chunk overlapping '
+                         'into this chunk\'s data')
+
+    def decode_chunk(self, io: BytesIO) -> None:
+        self._decode_region_entry(io)
+
+        if self._state in (ChunkState.OK, ChunkState.TOO_BIG):
+            self._decode_header(io)
+
+            if self._state in (ChunkState.OK, ChunkState.OVERLAPPING):
+                self._decode_nbt(io)
+            else:
+                log.warning(f'Cannot decode any data for chunk {self.coords}')
+
+        elif self._state is ChunkState.NOT_CREATED:
+            log.info(f'Chunk {self.coords} is not generated yet, nothing to decode')
+        else:
+            log.warning(f'Chunk {self.coords} is corrupted, cannot decode')
+
+    def _encode_region_entry(self, io: BytesIO, offset=None, sectors=None) -> None:
+        if offset is None:
+            offset = self.offset
+        if sectors is None:
+            sectors = self._sectors
+
+        io.seek(self.entryloc)
+        io.write(pack('>IB', offset, sectors)[1:])
+
+        io.seek(self.entryloc + SECTOR_LEN)
+        io.write(pack('>I', self.timestamp))
+
+    def _encode_header(self, io: BytesIO) -> None:
+        io.seek(self.offset * SECTOR_LEN)
+        io.write(pack('>I', self._length + 1))
+        io.write(pack('>B', self.compression.value))
+
+    def _encode_nbt(self, io: BytesIO) -> None:
+        io.seek(self.offset * SECTOR_LEN + 5)
+        io.write(self._data)
+
+    def encode_chunk(self, io: BytesIO) -> None:
+        if self.state is ChunkState.OK:
+            self._encode_region_entry(io)
+            self._encode_header(io)
+            self._encode_nbt(io)
+            io.write(self._padding * b'\x00')
+        else:
+            log.warning(f'Chunk {self.coords} is corrupted, '
+                        'tagging it as "not created" in region header '
+                        'and skipping further encoding')
+            self.encode_region_entry(io, 0, 0)
 
 
 class Region(MutableMapping):
-    def __init__(self, name=None, io=None, **contents):
-        self.name = name
-        if io is None:
-            self.chunks = contents.pop('chunks', {})
-        else:
-            self.chunks = {}
-            self.decodeRegion(io)
 
-    def decodeRegion(self, io):
+    def __init__(self, coords: Tuple[int, int]):
+        self.coords = Coordinates(coords[0], coords[1])
+        self.chunks = {}
+
+    def decode(self, io: BytesIO):
+        size = io.seek(0, 2)
+        if size == 0:
+            log.info(f'Region {self.coords} is empty')
+            return
+        elif size < SECTOR_LEN * 2:
+            log.critical(f'Region {self.coords} does not contain a header')
+            return
+
         for x in range(32):
             for z in range(32):
-                self.chunks[x, z] = Chunk(x, z)
-        for n in range(0, 4096, 4):
-            chunk = self.chunks[(int(n // 4) % 32), (int(n // 4) // 32)]
-            chunk.offset = unpack('>I', b'\x00' + io.read(3))[0]
-            chunk.sectors = unpack('>B', io.read(1))[0]
-        for n in range(0, 4096, 4):
-            chunk = self.chunks[(int(n // 4) % 32), (int(n // 4) // 32)]
-            chunk.timestamp = unpack('>I', io.read(4))[0]
-        for chunk in self.chunks.values():
-            if chunk.offset == 0 and chunk.sectors == 0:
-                continue
-            try:
-                io.seek(chunk.offset * 4096)
-                chunk.length = unpack('>I', io.read(4))[0]
-                chunk.compression = unpack('>B', io.read(1))[0]
-                with BytesIO() as tmpio:
-                    if chunk.compression == 2:
-                        tmpio.write(zlib.decompress(io.read(chunk.length - 1)))
-                    elif chunk.compression == 1:
-                        tmpio.write(gzip.decompress(io.read(chunk.length - 1)))
-                    else:
-                        raise ChunkException('Invalid chunk compression!')
-                    tmpio.seek(0)
-                    chunk.nbt = NBTObj(io=tmpio)
-            except IOError as e:
-                log.critical('Error decoding Region!')
-                log.critical(e)
-                break
+                c = self.chunks[x, z] = Chunk(x, z)
+                c.decode_chunk(io)
 
-    def encodeRegion(self, io):
-        self.encodeChunks()
-        self.calculateOffsets()
-        for n in range(0, 4096, 4):
-            chunk = self.chunks[(int(n // 4) % 32), (int(n // 4) // 32)]
-            io.write(pack('>I', chunk.offset)[1:])
-            io.write(pack('>B', chunk.sectors))
-        for n in range(0, 4096, 4):
-            chunk = self.chunks[(int(n // 4) % 32), (int(n // 4) // 32)]
-            io.write(pack('>I', chunk.timestamp))
-        for chunk in sorted(self.chunks.values(), key=lambda x: x.offset):
-            if chunk.compressed is None:
-                continue
-            io.write(pack('>I', chunk.length))
-            io.write(pack('>B', chunk.compression))
-            io.write(chunk.compressed)
-            io.write(chunk.padding * b'\x00')
+    def encode(self, io: BytesIO):
+        size = io.seek(0, 2)
 
-    def encodeChunks(self):
-        for chunk in self.chunks.values():
-            if chunk.offset == 0 and chunk.sectors == 0:
-                continue
-            try:
-                with BytesIO() as rawChunk:
-                    chunk.nbt.saveNBT(io=rawChunk)
-                    if chunk.compression == 2:
-                        compChunk = zlib.compress(rawChunk.getvalue())
-                    elif chunk.compression == 1:
-                        compChunk = gzip.compress(rawChunk.getvalue())
-                    else:
-                        raise ChunkException('Invalid chunk compression!')
-            except IOError as e:
-                log.critical(e)
-                break
-            chunk.compressed = compChunk
-            chunk.timestamp = int(time.time())
-            chunk.length = len(compChunk) + 1
-            sectors, r = divmod((chunk.length + 4), 4096)
-            if r == 0:
-                chunk.sectors = sectors
-            else:
-                chunk.sectors = sectors + 1
-            chunk.padding = 4096 * chunk.sectors - chunk.length - 4
+        header_len = SECTOR_LEN * 2
+        if size > header_len:
+            io.truncate(header_len)
+        io.seek(0)
+        io.write(header_len * b'\x00')
 
-    def calculateOffsets(self):
-        sortedChunks = sorted(self.chunks.values(), key=lambda x: x.offset)
-        for i in range(len(sortedChunks)):
-            if sortedChunks[i].offset <= 2:
-                continue
-            prevChunk = sortedChunks[i - 1]
-            sortedChunks[i].offset = prevChunk.offset + prevChunk.sectors
+        for x in range(32):
+            for z in range(32):
+                chunk = self.chunks[x, z]
+                if x == 0 and z == 0:
+                    offset = chunk.offset = 2
+                else:
+                    offset = chunk.offset
+
+                nxt = chunk.neighbour
+                if nxt:
+                    neighbour = self.chunks[nxt[0], nxt[1]]
+                    neighbour.offset = offset + chunk.sectors
+
+                chunk.encode_chunk(io)
 
     def __getitem__(self, key):
-        if key in self.chunks:
-            return self.chunks[key]
-        else:
-            key = key[0] - (self.name[0] * 32), key[1] - (self.name[1] * 32)
-            return self.chunks[key]
+        return self.chunks[key]
 
     def __setitem__(self, key, value):
         if key in self.chunks:
             self.chunks[key] = value
         else:
-            key = key[0] - (self.name[0] * 32), key[1] - (self.name[1] * 32)
-            self.chunks[key] = value
+            raise KeyError(f'Chunk {key} not in region file!')
 
     def __delitem__(self, key):
         if key in self.chunks:
             self.chunks[key] = Chunk(key[0], key[1])
         else:
-            key = key[0] - (self.name[0] * 32), key[1] - (self.name[1] * 32)
-            self.chunks[key] = Chunk(key[0], key[1])
+            raise KeyError(f'Chunk {key} not in region file!')
 
     def __iter__(self):
         return iter(self.chunks)
 
     def __len__(self):
         return len(self.chunks)
-
-    def __str__(self):
-        def _convers(c):
-            inWorld = c[0] + (self.name[0] * 32), c[1] + (self.name[1] * 32)
-            return f'Chunk ({c[0]},{c[1]}) in World at {inWorld}'
-        return f'Region {self.name[0]}.{self.name[1]}\n' + \
-            ('\n'.join([_convers(c) for c in self.chunks])
-             if len(self.chunks) > 0 else '')
-
-    def getChunkByBlock(self, x, z):
-        return self[(x >> 4), (z >> 4)]
