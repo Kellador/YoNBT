@@ -7,6 +7,7 @@ from io import BytesIO
 from struct import pack, unpack
 from collections.abc import MutableMapping
 from enum import Enum, unique
+from functools import cached_property
 
 from typing import NamedTuple, Tuple, Optional
 
@@ -45,10 +46,9 @@ class Coordinates(NamedTuple):
 class Chunk(NBTObj):
 
     def __init__(self, x: int, z: int):
-        self.coords = Coordinates(x, z)
-        self._entryloc = None
+        self._coords = Coordinates(x, z)
 
-        self.offset = 0
+        self._offset = 0
         self._sectors = 0
 
         self._timestamp = 0
@@ -62,16 +62,14 @@ class Chunk(NBTObj):
 
         self._padding = 0
 
-    @property
+    @cached_property
     def entryloc(self) -> int:
-        if self._entryloc is None:
-            self._entryloc = (self.coords.x + self.coords.z * 32) * 4
-        return self._entryloc
+        return (self._coords.x + self._coords.z * 32) * 4
 
-    @property
+    @cached_property
     def neighbour(self) -> Optional[Tuple[int, int]]:
-        z = (self.coords.z + 1) % 32
-        x = (self.coords.x + 1) if z == 0 else self.coords.x
+        z = (self._coords.z + 1) % 32
+        x = (self._coords.x + 1) if z == 0 else self._coords.x
         if x == 32:
             return None
         else:
@@ -159,7 +157,7 @@ class Chunk(NBTObj):
     def _decode_region_entry(self, io: BytesIO) -> None:
         io.seek(self.entryloc)
         offset, sectors = unpack('>IB', b'\x00' + io.read(4))
-        self.offset, self._sectors = offset, sectors
+        self._offset, self._sectors = offset, sectors
 
         # determine viability based on region header entry
         # NOT_CREATED simply means the chunk is not yet generated,
@@ -182,7 +180,7 @@ class Chunk(NBTObj):
         self._timestamp = unpack('>I', io.read(4))[0]
 
     def _decode_header(self, io: BytesIO) -> None:
-        io.seek(self.offset * SECTOR_LEN)
+        io.seek(self._offset * SECTOR_LEN)
         length = unpack('>I', io.read(4))[0]
         self._length = length
 
@@ -212,7 +210,7 @@ class Chunk(NBTObj):
             self._state = ChunkState.CORRUPTED
 
     def _decode_nbt(self, io: BytesIO) -> None:
-        io.seek(self.offset * SECTOR_LEN + 5)
+        io.seek(self._offset * SECTOR_LEN + 5)
         try:
             with BytesIO() as tmpio:
                 if self.compression is Compression.ZLIB:
@@ -224,10 +222,10 @@ class Chunk(NBTObj):
                 tmpio.seek(0)
                 super().__init__(tmpio)
         except IOError as e:
-            log.critical(f'Error decoding chunk {self.coords}')
+            log.critical(f'Error decoding chunk {self._coords}')
             log.critical(e)
         except NBTException as e:
-            log.critical(f'Decoding data of chunk {self.coords} failed')
+            log.critical(f'Decoding data of chunk {self._coords} failed')
             log.critical(e)
             if self._state is ChunkState.OVERLAPPING:
                 log.info('This is likely a result of another chunk overlapping '
@@ -242,16 +240,16 @@ class Chunk(NBTObj):
             if self._state in (ChunkState.OK, ChunkState.OVERLAPPING):
                 self._decode_nbt(io)
             else:
-                log.warning(f'Cannot decode any data for chunk {self.coords}')
+                log.warning(f'Cannot decode any data for chunk {self._coords}')
 
         elif self._state is ChunkState.NOT_CREATED:
-            log.info(f'Chunk {self.coords} is not generated yet, nothing to decode')
+            log.info(f'Chunk {self._coords} is not generated yet, nothing to decode')
         else:
-            log.warning(f'Chunk {self.coords} is corrupted, cannot decode')
+            log.warning(f'Chunk {self._coords} is corrupted, cannot decode')
 
     def _encode_region_entry(self, io: BytesIO, offset=None, sectors=None) -> None:
         if offset is None:
-            offset = self.offset
+            offset = self._offset
         if sectors is None:
             sectors = self._sectors
 
@@ -262,12 +260,12 @@ class Chunk(NBTObj):
         io.write(pack('>I', self.timestamp))
 
     def _encode_header(self, io: BytesIO) -> None:
-        io.seek(self.offset * SECTOR_LEN)
+        io.seek(self._offset * SECTOR_LEN)
         io.write(pack('>I', self._length + 1))
         io.write(pack('>B', self.compression.value))
 
     def _encode_nbt(self, io: BytesIO) -> None:
-        io.seek(self.offset * SECTOR_LEN + 5)
+        io.seek(self._offset * SECTOR_LEN + 5)
         io.write(self._data)
 
     def encode_chunk(self, io: BytesIO) -> None:
@@ -277,7 +275,7 @@ class Chunk(NBTObj):
             self._encode_nbt(io)
             io.write(self._padding * b'\x00')
         else:
-            log.warning(f'Chunk {self.coords} is corrupted, '
+            log.warning(f'Chunk {self._coords} is corrupted, '
                         'tagging it as "not created" in region header '
                         'and skipping further encoding')
             self.encode_region_entry(io, 0, 0)
@@ -286,24 +284,24 @@ class Chunk(NBTObj):
 class Region(MutableMapping):
 
     def __init__(self, coords: Tuple[int, int]):
-        self.coords = Coordinates(coords[0], coords[1])
-        self.chunks = {}
+        self._coords = Coordinates(coords[0], coords[1])
+        self._chunks = {}
 
-    def decode(self, io: BytesIO):
+    def decode_region(self, io: BytesIO):
         size = io.seek(0, 2)
         if size == 0:
-            log.info(f'Region {self.coords} is empty')
+            log.info(f'Region {self._coords} is empty')
             return
         elif size < SECTOR_LEN * 2:
-            log.critical(f'Region {self.coords} does not contain a header')
+            log.critical(f'Region {self._coords} does not contain a header')
             return
 
         for x in range(32):
             for z in range(32):
-                c = self.chunks[x, z] = Chunk(x, z)
+                c = self._chunks[x, z] = Chunk(x, z)
                 c.decode_chunk(io)
 
-    def encode(self, io: BytesIO):
+    def encode_region(self, io: BytesIO):
         size = io.seek(0, 2)
 
         header_len = SECTOR_LEN * 2
@@ -314,36 +312,36 @@ class Region(MutableMapping):
 
         for x in range(32):
             for z in range(32):
-                chunk = self.chunks[x, z]
+                chunk = self._chunks[x, z]
                 if x == 0 and z == 0:
-                    offset = chunk.offset = 2
+                    offset = chunk._offset = 2
                 else:
-                    offset = chunk.offset
+                    offset = chunk._offset
 
                 nxt = chunk.neighbour
                 if nxt:
-                    neighbour = self.chunks[nxt[0], nxt[1]]
-                    neighbour.offset = offset + chunk.sectors
+                    neighbour = self._chunks[nxt[0], nxt[1]]
+                    neighbour._offset = offset + chunk.sectors
 
                 chunk.encode_chunk(io)
 
     def __getitem__(self, key):
-        return self.chunks[key]
+        return self._chunks[key]
 
     def __setitem__(self, key, value):
-        if key in self.chunks:
-            self.chunks[key] = value
+        if key in self._chunks:
+            self._chunks[key] = value
         else:
             raise KeyError(f'Chunk {key} not in region file!')
 
     def __delitem__(self, key):
-        if key in self.chunks:
-            self.chunks[key] = Chunk(key[0], key[1])
+        if key in self._chunks:
+            self._chunks[key] = Chunk(key[0], key[1])
         else:
             raise KeyError(f'Chunk {key} not in region file!')
 
     def __iter__(self):
-        return iter(self.chunks)
+        return iter(self._chunks)
 
     def __len__(self):
-        return len(self.chunks)
+        return len(self._chunks)

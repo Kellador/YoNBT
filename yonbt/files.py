@@ -53,7 +53,7 @@ class RegionFile(Region):
 
         super().__init__(coords)
         with open(self.filename, 'rb') as io:
-            self.decode(io)
+            self.decode_region(io)
 
         log.debug(f'Loaded \"{self.filename}\" as Region{coords}')
 
@@ -67,6 +67,6 @@ class RegionFile(Region):
                             ' Minecraft will not be able to read this file!')
 
         with open(destfile, 'wb') as io:
-            self.encode(io)
+            self.encode_region(io)
 
         log.debug(f'Saved Region to \"{destfile}\"')
