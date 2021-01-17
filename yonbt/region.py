@@ -243,7 +243,7 @@ class Chunk(NBTObj):
                 log.warning(f'Cannot decode any data for chunk {self._coords}')
 
         elif self._state is ChunkState.NOT_CREATED:
-            log.info(f'Chunk {self._coords} is not generated yet, nothing to decode')
+            log.debug(f'Chunk {self._coords} is not generated yet, nothing to decode')
         else:
             log.warning(f'Chunk {self._coords} is corrupted, cannot decode')
 
@@ -268,17 +268,30 @@ class Chunk(NBTObj):
         io.seek(self._offset * SECTOR_LEN + 5)
         io.write(self._data)
 
-    def encode_chunk(self, io: BytesIO) -> None:
-        if self.state is ChunkState.OK:
+    def encode_chunk(self, io: BytesIO, update_state=True) -> None:
+        if update_state:
+            state = self.state
+        else:
+            state = self._state
+
+        if state is ChunkState.OK:
             self._encode_region_entry(io)
             self._encode_header(io)
             self._encode_nbt(io)
             io.write(self._padding * b'\x00')
+        elif state is ChunkState.NOT_CREATED:
+            log.debug(f'Chunk {self._coords} not yet generated, '
+                      'skipping further encoding')
+            self._encode_region_entry(io, 0, 0)
+        elif state is ChunkState.TOO_BIG:
+            log.warning(f'Chunk {self.coords} is too big, '
+                        'skipping further encoding')
+            self._encode_region_entry(io, 0, 0)
         else:
-            log.warning(f'Chunk {self._coords} is corrupted, '
+            log.warning(f'Chunk {self._coords} was corrupted, '
                         'tagging it as "not created" in region header '
                         'and skipping further encoding')
-            self.encode_region_entry(io, 0, 0)
+            self._encode_region_entry(io, 0, 0)
 
 
 class Region(MutableMapping):
@@ -310,20 +323,30 @@ class Region(MutableMapping):
         io.seek(0)
         io.write(header_len * b'\x00')
 
+        first = True
+
         for x in range(32):
             for z in range(32):
                 chunk = self._chunks[x, z]
-                if x == 0 and z == 0:
-                    offset = chunk._offset = 2
-                else:
-                    offset = chunk._offset
 
+                state = chunk.state
                 nxt = chunk.neighbour
+
+                if first:
+                    if state is ChunkState.OK:
+                        chunk._offset = 2
+                        first = False
+
+                offset = chunk._offset
+
                 if nxt:
                     neighbour = self._chunks[nxt[0], nxt[1]]
-                    neighbour._offset = offset + chunk.sectors
+                    if state is ChunkState.OK:
+                        neighbour._offset = offset + chunk.sectors
+                    else:
+                        neighbour._offset = offset
 
-                chunk.encode_chunk(io)
+                chunk.encode_chunk(io, update_state=False)
 
     def __getitem__(self, key):
         return self._chunks[key]
