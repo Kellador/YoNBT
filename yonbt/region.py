@@ -349,22 +349,53 @@ class Region(MutableMapping):
                 chunk.encode_chunk(io, update_state=False)
 
     def __getitem__(self, key):
-        return self._chunks[key]
+        try:
+            return self._chunks[key]
+        except KeyError:
+            _key = key[0] - (self._coords.x * 32), key[1] - (self._coords.z * 32)
+            try:
+                return self._chunks[_key]
+            except KeyError:
+                raise KeyError(f'Chunk {key} not in region file!')
 
     def __setitem__(self, key, value):
-        if key in self._chunks:
+        try:
             self._chunks[key] = value
-        else:
-            raise KeyError(f'Chunk {key} not in region file!')
+        except KeyError:
+            _key = key[0] - (self._coords.x * 32), key[1] - (self._coords.z * 32)
+            try:
+                self._chunks[_key] = value
+            except KeyError:
+                raise KeyError(f'Chunk {key} not in region file!')
 
     def __delitem__(self, key):
-        if key in self._chunks:
+        try:
             self._chunks[key] = Chunk(key[0], key[1])
-        else:
-            raise KeyError(f'Chunk {key} not in region file!')
+        except KeyError:
+            _key = key[0] - (self._coords.x * 32), key[1] - (self._coords.z * 32)
+            try:
+                self._chunks[_key] = Chunk(_key[0], _key[1])
+            except KeyError:
+                raise KeyError(f'Chunk {key} not in region file!')
 
     def __iter__(self):
         return iter(self._chunks)
 
     def __len__(self):
         return len(self._chunks)
+
+    def __str__(self):
+        cStart = (self._coords.x * 32), (self._coords.z * 32)
+        cEnd = 31 + (self._coords.x * 32), 31 + (self._coords.z * 32)
+        bStart = (cStart[0] << 4), (cStart[1] << 4)
+        bEnd = (cEnd[0] + 1 << 4) - 1, (cEnd[1] + 1 << 4) - 1
+        return (f'Region {self._coords}\n'
+                f'contains chunks {cStart} to {cEnd}\n'
+                f'with blocks {bStart} to {bEnd}')
+
+    def pprint(self):
+        def _inworld(c):
+            inWorld = c[0] + (self._coords.x * 32), c[1] + (self._coords.z * 32)
+            return f'Chunk {c} in world at {inWorld}'
+        print(f'Region {self._coords}\n' +
+              '\n'.join([_inworld(c) for c in self._chunks]))
