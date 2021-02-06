@@ -6,12 +6,12 @@ used by many Minecraft files.
 A few simple high level classes for easy decoding and re-encoding of generic NBT formatted files, such as playerdata files,
 and the more complex region files, containing all the chunk data for a Minecraft world.
 
-Low level classes representing the underlying NBT structure, allowing you to create new tag entries in decoded NBT files
-or to create whole NBT files from scratch. Be sure to familiarize yourself with the [NBT Format](http://wiki.vg/NBT) beforehand.
+Low level classes representing the underlying NBT format.
 
 A few utility functions to make working with this library easier, especially if you're just using it from a Python REPL for quick edits.
 
 ## Basic Usage
+
 ### Encoding and Decoding
 ```python
 from yonbt import NBTFile, RegionFile
@@ -37,6 +37,8 @@ region.save("/home/nbt/r.0.2.mca")
 region.save()
 ```
 
+#
+
 ### Structure
 In the following section we'll look at how to use the NBTFile and RegionFile objects, but for that you'll need to understand how those are structured underneath.
 
@@ -52,85 +54,113 @@ This is a crude presentation:
   - contains metadata and `Chunk`(s)
 
 `Chunk` : (represents a chunk)
-- contains metadata and an `NBTObj` (which inherits `TAG_Compound`... you get the idea)
+- contains metadata and inherits `NBTObj` (which inherits `TAG_Compound`... you get the idea)
 
-The two most important tags are for one, as you might have noticed,
+The two most important tags are, as you might have noticed,
 the `TAG_Compound` and also the `TAG_List`;
-Both these are important because they're the only tags that can contain other tags.
+Both of these are important because they're the only tags that can contain other tags.
 
 `TAG_Compound` is a MutableMapping (a dictionary), holding tags with their names
 as their keys.
 
 `TAG_List` is a MutableSequence (a list), holding unnamed tags with only index keys.
 
-`Region` and `Chunk`, while not tags, are also MutableMappings (dictionaries).
+`Region` holds all the chunks in a region with tuples of their x, z coordinates as the keys (these are chunk coordinates, NOT block coordinates), both `in-region` and `in-world` coordinates may be used to access a chunk (`in-world` is probably what you'd get from a crashreport or in-game reporting tool);
 
-`Region` holds all the chunks in a region by the tuple of their x, z coordinates as the keys (these are chunk coordinates, NOT block coordinates, there's a difference).
-
-`Chunk` exposes the `NBTObj` within, so it works just like a `TAG_Compound`.
+`Chunk` inherits `NBTObj`, so it works just like a `TAG_Compound`.
 
 Okay with that out of the way, let's move on!
 
+#
+
 ### Editing
-Assuming you've already loaded up an nbt file and a region file as described
-in the Encoding and Decoding section above, you'll have yourself an
-`nbt` and a `region` variable.
+Loading up an nbt file and a region file as described
+in the Encoding and Decoding section above, you can start looking at their contents and editing them.
 
 ```python
-# You can print your nbt object:
+from yonbt import NBTFile, RegionFile
+
+nbt = NBTFile('/home/nbt/playerdata.dat')
+region = RegionFile('/home/nbt/r.1.-2.mca')
+
+# You can print your nbt:
 print(nbt)
+# and region objects:
+print(region)
 # giving you a very basic representation of the content within.
 
-# Pretty-print a "tree" view:
-nbt.pretty()
+# Pretty-print a "tree" view of List and Compound tags
+# (works on NBTFile since it inherits from Compound):
+nbt.pprint()
 # giving you a nicer representation with indentation and everything.
 
-# Fetch a tag within `nbt` by its name:
+# Pretty-print a region:
+region.pprint()
+# to get a full listing of all chunks in it, with their coordinates.
+
+
+# Navigation within an nbt file is just like traversing nested dictionaries.
+
+# So to grab a tag in the top level of our `nbt` object:
 someTag = nbt['someTag']
+# and to grab a tag two levels deeper:
+deepList = nbt['topLevelEntry']['oneDown']['deepList']
+# etc.
 
-# Print or pretty-print `someTag`:
+# Remember to print (or pprint) often to find your way around:
 print(someTag)
+# as mentioned above, pretty printing is only available for TAG_List and TAG_Compound:
+deepList.pprint()
 
-# Edit `someTag`s value (make sure the value matches the type of tag):
-someTag.value = "over 9000!"
+# Edit the value of the second tag in `deepList`:
+deepList[1].value = "over 9000!"
+# make sure the type of the new value matches the tag, or you'll get an error on saving!
 
-# Delete `someTag` from `nbt`:
+# And of course, deleting a tag:
 del nbt['someTag']
-# or, if you already hold the `someTag` object:
-nbt.remove(someTag)
+
+
+# Region files are much the same, except that here (unlike in generic NBT files) the top level is not a TAG_Compound, but a mapping of all the chunks in the region;
+# Once you've select a chunk to work on, by accessing it via it's coordinates:
+chunk = region[22, 30]
+# you can start working with it like any other nbt file as described above.
+
+# If you just want to completely delete a chunk:
+del region[22, 30]
+# This will not fully remove the chunk, since the registry header of a region file must always contain information such as where in the file a chunk can be found, so instead 'del' replaces the chunk with an empty one, with no data, and a registry entry that identifies it as "not yet created".
 ```
 
+Of course you can do much more than just navigating around and editing some attributes, such as copy pasting a tag from one file to another, adding new tags, or writing a whole chunk from scratch, but for that I would suggest familiarizing yourself with the [NBT Format](https://minecraft.gamepedia.com/NBT_format) beforehand.
+
+#
+
 ### Utility Functions
+
+To make navigating around inside regions, or just finding out which region file you need to open, some utility functions are also provided:
+
 ```python
+from yonbt import chunkByBlock, locateBlock, locateChunk
+
+# Finding chunk coordinates, given block coordinates:
 chunkByBlock(x, z)
-# returns a tuple of two integers, which is the same coordinate of the chunk
-# that the given block is in.
+# returns a tuple of two integers, being the coordinates of the chunk that the given block is in.
 # You could use it like this, to get the chunk of block x,z from a region:
 region[chunkByBlock(10, -24)]
-# If the block is not in that region then a KeyError will be raised.
 
-regionByBlock(x, z)
-# returns a string with the name of the region that the block is in.
-# like so: 'r.1.-5.mca', you could use this directly like this:
-region = RegionFile(regionByBlock(x, z))
 
-regionByChunk(x, z)
-# same deal, just that here x, z are the coordinates of the chunk, not any block.
+# Getting both region filename and chunk coords, given block coords:
+locateBlock(x, z)
+# returns a tuple consisting of the region filename as a string, and another tuple being the chunk coordinates.
+# Could be used like this:
+rfile, chunkcoords = locateBlock(x, z)
+region = RegionFile(f'/home/nbt/regions/{rfile}')
+chunk = region[chunkcoords]
 
-getTileEntity(x, z, region)
-# or
-getTileEntity(x, z, chunk)
-# this returns a tuple consisting of the tag for the tile entity, with the given
-# coordinates, and the list that it is contained in: (entity, listContainingEntity)
-# You also pass in either a Region or Chunk object, that you have
-# instantiated beforehand. Just passing in the string returned by regionByBlock
-# won't work.
 
-deleteTileEntity(x, z, region)
-# or
-deleteTileEntity(x, z, chunk)
-# same deal as getTileEntity, but this deletes the tag for the tile entity.
-# Good for quick edits, for example when a tile entity is causing crashes.
-# Note that this function does not handle saving the change, you gotta save
-# the region file back yourself, as described above.
+# Getting region filename, given chunk coords:
+locateChunk(x, z)
+# here x and z are the in-world coordinates of a chunk,
+# returns the filename of the region, containing given chunk, as a string.
+# Might be used like this:
+region = RegionFile(f'/home/nbt/regions/{locateChunk(x, z)}')
 ```
