@@ -120,14 +120,18 @@ deepList[1].value = "over 9000!"
 del nbt['someTag']
 
 
-# Region files are much the same, except that here (unlike in generic NBT files) the top level is not a TAG_Compound, but a mapping of all the chunks in the region;
+# Region files are much the same, except that here the top level is not a TAG_Compound,
+# but a mapping of all the chunks in the region;
 # Once you've select a chunk to work on, by accessing it via it's coordinates:
 chunk = region[22, 30]
 # you can start working with it like any other nbt file as described above.
 
 # If you just want to completely delete a chunk:
 del region[22, 30]
-# This will not fully remove the chunk, since the registry header of a region file must always contain information such as where in the file a chunk can be found, so instead 'del' replaces the chunk with an empty one, with no data, and a registry entry that identifies it as "not yet created".
+# This will not fully remove the chunk,
+# since the registry header of a region file must always contain information such as where
+# in the file a chunk can be found, so instead 'del' replaces the chunk with an empty one,
+# with no data, and a registry entry that identifies it as "not yet created".
 ```
 
 Of course you can do much more than just navigating around and editing some attributes, such as copy pasting a tag from one file to another, adding new tags, or writing a whole chunk from scratch, but for that I would suggest familiarizing yourself with the [NBT Format](https://minecraft.gamepedia.com/NBT_format) beforehand.
@@ -150,7 +154,8 @@ region[chunkByBlock(10, -24)]
 
 # Getting both region filename and chunk coords, given block coords:
 locateBlock(x, z)
-# returns a tuple consisting of the region filename as a string, and another tuple being the chunk coordinates.
+# returns a tuple consisting of the region filename as a string,
+# and another tuple being the chunk coordinates.
 # Could be used like this:
 rfile, chunkcoords = locateBlock(x, z)
 region = RegionFile(f'/home/nbt/regions/{rfile}')
